@@ -97,7 +97,11 @@
     // Build fallback chain as [{url, source}, ...]
     const chain = [];
     if (info.logoUrl) chain.push({ url: info.logoUrl, source: SOURCE_BIMI });
-    if (info.faviconRootUrl) chain.push({ url: info.faviconRootUrl, source: SOURCE_FAVICON });
+
+    // Skip Google favicon if background detected it's the generic gray globe
+    if (info.faviconRootUrl && !info.faviconRootIsGlobe) {
+      chain.push({ url: info.faviconRootUrl, source: SOURCE_FAVICON });
+    }
     if (info.faviconDirectUrl) chain.push({ url: info.faviconDirectUrl, source: SOURCE_FAVICON });
     chain.push({ url: CAUTION_URL, source: SOURCE_UNKNOWN });
 

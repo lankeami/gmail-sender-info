@@ -80,6 +80,50 @@ function googleFaviconUrl(domain) {
   return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=32`;
 }
 
+// --- Globe favicon detection ---
+// Google's favicon service (www.google.com/s2/favicons) always returns 200,
+// even for unknown domains — it just serves a generic gray globe icon.
+// The google.com URL redirects to t0.gstatic.com/faviconV2, and MV3 service
+// workers can't bypass CORS on redirected requests. So we fetch the gstatic
+// faviconV2 URL directly (no redirect) with host_permissions for *.gstatic.com.
+
+function gstaticFaviconV2Url(domain) {
+  return `https://t0.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=http://${encodeURIComponent(domain)}&size=32`;
+}
+
+let globeRefBytes = null;
+
+async function getGlobeRefBytes() {
+  if (globeRefBytes) return globeRefBytes;
+  try {
+    const resp = await fetch(gstaticFaviconV2Url('xyznotarealdomain12345.invalid'));
+    if (resp.ok) {
+      globeRefBytes = new Uint8Array(await resp.arrayBuffer());
+    }
+  } catch { /* fetch failed */ }
+  return globeRefBytes;
+}
+
+/**
+ * Check if a domain's Google favicon is the generic gray globe.
+ * Fetches the gstatic faviconV2 URL directly to avoid redirect CORS issues.
+ */
+async function checkIsGlobe(domain) {
+  try {
+    const [ref, resp] = await Promise.all([
+      getGlobeRefBytes(),
+      fetch(gstaticFaviconV2Url(domain)),
+    ]);
+    if (!ref || !resp.ok) return false;
+
+    const actual = new Uint8Array(await resp.arrayBuffer());
+    if (ref.length !== actual.length) return false;
+    return ref.every((b, i) => b === actual[i]);
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Resolve logo for a sender domain.
  * Chain: BIMI → Google root favicon → direct /favicon.ico → caution.
@@ -99,27 +143,36 @@ async function resolveLogo(fullDomain) {
     bimiUrl = await lookupBimi(rootDomain);
   }
 
+  // Check if Google favicons are the generic gray globe
+  const subGoogleUrl = googleFaviconUrl(fullDomain);
+  const rootGoogleUrl = googleFaviconUrl(rootDomain);
+  const wwwGoogleUrl = googleFaviconUrl(wwwDomain);
+
+  // Check root favicon for globe (used for the main logo fallback)
+  const rootIsGlobe = await checkIsGlobe(rootDomain);
+
   return {
     fullDomain,
     rootDomain,
     logoUrl: bimiUrl,
     logoSource: bimiUrl ? 'bimi' : 'favicon',
-    faviconRootUrl: googleFaviconUrl(rootDomain),
+    faviconRootUrl: rootGoogleUrl,
+    faviconRootIsGlobe: rootIsGlobe,
     faviconDirectUrl: `https://${rootDomain}/favicon.ico`,
     favicons: {
       sub: {
         domain: fullDomain,
-        googleUrl: googleFaviconUrl(fullDomain),
+        googleUrl: subGoogleUrl,
         directUrl: `https://${fullDomain}/favicon.ico`,
       },
       root: {
         domain: rootDomain,
-        googleUrl: googleFaviconUrl(rootDomain),
+        googleUrl: rootGoogleUrl,
         directUrl: `https://${rootDomain}/favicon.ico`,
       },
       www: {
         domain: wwwDomain,
-        googleUrl: googleFaviconUrl(wwwDomain),
+        googleUrl: wwwGoogleUrl,
         directUrl: `https://${wwwDomain}/favicon.ico`,
       },
     },
