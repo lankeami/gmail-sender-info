@@ -1,0 +1,30 @@
+{
+  "manifest_version": 3,
+  "name": "Gmail Sender Info",
+  "version": "1.0.0",
+  "description": "Shows sender domain info, logo, and favicon on Gmail inbox rows and email view.",
+  "permissions": ["storage"],
+  "host_permissions": ["https://dns.google/*", "https://www.google.com/*", "https://*.gstatic.com/*"],
+  "background": {
+    "service_worker": "src/background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://mail.google.com/*"],
+      "js": ["src/content.js"],
+      "css": ["src/styles.css"],
+      "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["images/caution.svg"],
+      "matches": ["https://mail.google.com/*"]
+    }
+  ],
+  "icons": {
+    "16": "images/icon16.png",
+    "48": "images/icon48.png",
+    "128": "images/icon128.png"
+  }
+}

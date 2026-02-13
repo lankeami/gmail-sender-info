@@ -1,0 +1,107 @@
+/* Gmail Sender Info — Tooltip & Banner Styles */
+
+/* --- Tooltip (inbox hover) --- */
+
+#gsi-tooltip {
+  display: none;
+  position: absolute;
+  z-index: 10000;
+  padding: 8px 12px;
+  background: #fff;
+  border: 1px solid #dadce0;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+  font-family: 'Google Sans', Roboto, Arial, sans-serif;
+  font-size: 13px;
+  color: #202124;
+  max-width: 360px;
+  pointer-events: none;
+}
+
+/* Row 1: logo + full domain side by side */
+.gsi-tooltip-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.gsi-domain-full {
+  font-weight: 500;
+  color: #202124;
+  word-break: break-all;
+}
+
+/* Row 2: root domain subtitle */
+.gsi-domain-root {
+  font-size: 11px;
+  color: #5f6368;
+  margin-top: 2px;
+}
+
+/* --- Banner (email view) --- */
+
+#gsi-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  margin-bottom: 8px;
+  background: #f8f9fa;
+  border: 1px solid #dadce0;
+  border-radius: 8px;
+  font-family: 'Google Sans', Roboto, Arial, sans-serif;
+  font-size: 13px;
+  color: #202124;
+}
+
+.gsi-banner-text {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.gsi-banner-domain {
+  font-weight: 500;
+  word-break: break-all;
+}
+
+.gsi-banner-root {
+  color: #5f6368;
+  font-size: 12px;
+}
+
+/* --- Shared --- */
+
+.gsi-logo {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+  border-radius: 2px;
+  object-fit: contain;
+}
+
+.gsi-source-badge {
+  display: inline-block;
+  padding: 1px 6px;
+  margin-top: 4px;
+  font-size: 10px;
+  font-weight: 500;
+  border-radius: 4px;
+  letter-spacing: 0.3px;
+}
+
+/* BIMI verified — green */
+.gsi-source-badge.gsi-badge-bimi {
+  color: #1b5e20;
+}
+
+/* Favicon — orange */
+.gsi-source-badge.gsi-badge-favicon {
+  color: #e65100;
+}
+
+/* Unknown / caution fallback — red */
+.gsi-source-badge.gsi-badge-unknown {
+  color: #c62828;
+}
