@@ -93,9 +93,11 @@ async function checkFavicon(domain) {
 /**
  * Resolve logo for a sender domain.
  * Chain: BIMI full domain → BIMI root domain → validated root favicon → null (unknown).
+ * Also checks subdomain, root, and www favicons in parallel for the detail accordion.
  */
 async function resolveLogo(fullDomain) {
   const rootDomain = getRootDomain(fullDomain);
+  const wwwDomain = `www.${rootDomain}`;
 
   // Try BIMI on full domain
   let bimiUrl = await lookupBimi(fullDomain);
@@ -105,11 +107,15 @@ async function resolveLogo(fullDomain) {
     bimiUrl = await lookupBimi(rootDomain);
   }
 
-  // Only check favicon if no BIMI
-  let faviconRootUrl = null;
-  if (!bimiUrl) {
-    faviconRootUrl = await checkFavicon(rootDomain);
-  }
+  // Check all three favicon variants in parallel
+  const [subGoogle, rootGoogle, wwwGoogle] = await Promise.all([
+    checkFavicon(fullDomain),
+    checkFavicon(rootDomain),
+    checkFavicon(wwwDomain),
+  ]);
+
+  // Main logo uses root domain's Google favicon (skip if BIMI found)
+  const faviconRootUrl = bimiUrl ? null : rootGoogle;
 
   let logoSource;
   if (bimiUrl) logoSource = 'bimi';
@@ -122,6 +128,23 @@ async function resolveLogo(fullDomain) {
     logoUrl: bimiUrl,
     logoSource,
     faviconRootUrl,
+    favicons: {
+      sub: {
+        domain: fullDomain,
+        googleUrl: subGoogle,
+        directUrl: `https://${fullDomain}/favicon.ico`,
+      },
+      root: {
+        domain: rootDomain,
+        googleUrl: rootGoogle,
+        directUrl: `https://${rootDomain}/favicon.ico`,
+      },
+      www: {
+        domain: wwwDomain,
+        googleUrl: wwwGoogle,
+        directUrl: `https://${wwwDomain}/favicon.ico`,
+      },
+    },
   };
 }
 

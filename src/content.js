@@ -122,6 +122,32 @@
     badge.textContent = SOURCE_LABELS[sourceKey] || sourceKey;
   }
 
+  /**
+   * Create a favicon <img> for the detail accordion.
+   * Chain: Google URL (if 200) → direct /favicon.ico → caution SVG.
+   */
+  function createDetailFaviconImg(faviconInfo) {
+    const img = document.createElement('img');
+    img.classList.add('gsi-detail-icon');
+    img.width = 16;
+    img.height = 16;
+
+    const chain = [];
+    if (faviconInfo.googleUrl) chain.push(faviconInfo.googleUrl);
+    chain.push(faviconInfo.directUrl);
+    chain.push(CAUTION_URL);
+
+    let idx = 0;
+    img.onerror = () => {
+      idx++;
+      if (idx < chain.length) {
+        img.src = chain[idx];
+      }
+    };
+    img.src = chain[0];
+    return img;
+  }
+
   // --- Tooltip (inbox hover) ---
 
   let tooltipEl = null;
@@ -220,11 +246,15 @@
     const banner = document.createElement('div');
     banner.id = 'gsi-banner';
 
+    // --- Top row: logo + domain + badge ---
+    const topRow = document.createElement('div');
+    topRow.classList.add('gsi-banner-top');
+
     const sourceBadge = document.createElement('span');
     sourceBadge.classList.add('gsi-source-badge');
 
     const logo = createLogoImg(info, (sourceKey) => updateBadge(sourceBadge, sourceKey));
-    banner.appendChild(logo);
+    topRow.appendChild(logo);
 
     const textWrap = document.createElement('div');
     textWrap.classList.add('gsi-banner-text');
@@ -242,8 +272,59 @@
     }
 
     textWrap.appendChild(sourceBadge);
+    topRow.appendChild(textWrap);
+    banner.appendChild(topRow);
 
-    banner.appendChild(textWrap);
+    // --- Accordion: favicon details ---
+    if (info.favicons) {
+      const accordion = document.createElement('div');
+      accordion.classList.add('gsi-accordion');
+
+      const header = document.createElement('div');
+      header.classList.add('gsi-accordion-header');
+      const chevron = document.createElement('span');
+      chevron.classList.add('gsi-chevron');
+      chevron.textContent = '\u25B6';
+      header.appendChild(chevron);
+      header.appendChild(document.createTextNode(' Details'));
+
+      const content = document.createElement('div');
+      content.classList.add('gsi-accordion-content');
+
+      const labels = { sub: 'subdomain', root: 'root', www: 'www' };
+      for (const [key, label] of Object.entries(labels)) {
+        const fav = info.favicons[key];
+        if (!fav) continue;
+
+        const row = document.createElement('div');
+        row.classList.add('gsi-detail-row');
+
+        const icon = createDetailFaviconImg(fav);
+        row.appendChild(icon);
+
+        const domainLabel = document.createElement('span');
+        domainLabel.classList.add('gsi-detail-label');
+        domainLabel.textContent = label;
+        row.appendChild(domainLabel);
+
+        const domainValue = document.createElement('span');
+        domainValue.classList.add('gsi-detail-domain');
+        domainValue.textContent = fav.domain;
+        row.appendChild(domainValue);
+
+        content.appendChild(row);
+      }
+
+      header.addEventListener('click', () => {
+        const isOpen = content.style.display === 'block';
+        content.style.display = isOpen ? 'none' : 'block';
+        chevron.textContent = isOpen ? '\u25B6' : '\u25BC';
+      });
+
+      accordion.appendChild(header);
+      accordion.appendChild(content);
+      banner.appendChild(accordion);
+    }
 
     // Insert before the subject line
     subjectEl.parentElement.insertBefore(banner, subjectEl);

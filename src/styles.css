@@ -41,9 +41,6 @@
 /* --- Banner (email view) --- */
 
 #gsi-banner {
-  display: flex;
-  align-items: center;
-  gap: 8px;
   padding: 6px 12px;
   margin-bottom: 8px;
   background: #f8f9fa;
@@ -52,6 +49,12 @@
   font-family: 'Google Sans', Roboto, Arial, sans-serif;
   font-size: 13px;
   color: #202124;
+}
+
+.gsi-banner-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .gsi-banner-text {
@@ -69,6 +72,64 @@
 .gsi-banner-root {
   color: #5f6368;
   font-size: 12px;
+}
+
+/* --- Accordion --- */
+
+.gsi-accordion {
+  margin-top: 6px;
+  border-top: 1px solid #e8eaed;
+  padding-top: 4px;
+}
+
+.gsi-accordion-header {
+  cursor: pointer;
+  font-size: 11px;
+  color: #5f6368;
+  user-select: none;
+  padding: 2px 0;
+}
+
+.gsi-accordion-header:hover {
+  color: #202124;
+}
+
+.gsi-chevron {
+  font-size: 9px;
+  display: inline-block;
+  transition: transform 0.15s;
+}
+
+.gsi-accordion-content {
+  display: none;
+  padding: 4px 0 2px;
+}
+
+.gsi-detail-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 0;
+}
+
+.gsi-detail-icon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  border-radius: 2px;
+  object-fit: contain;
+}
+
+.gsi-detail-label {
+  font-size: 11px;
+  color: #5f6368;
+  min-width: 65px;
+}
+
+.gsi-detail-domain {
+  font-size: 11px;
+  color: #202124;
+  word-break: break-all;
 }
 
 /* --- Shared --- */
