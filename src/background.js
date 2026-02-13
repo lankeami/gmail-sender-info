@@ -74,26 +74,18 @@ async function lookupBimi(domain) {
 }
 
 /**
- * Check if Google's favicon service has a real favicon for a domain.
- * Returns the URL if the service responds 200, null if 404/error.
- * On CORS or network failure, returns the URL anyway (let <img> try).
+ * Build a Google favicon service URL for a domain.
  */
-async function checkFavicon(domain) {
-  const url = `https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=32`;
-  try {
-    const resp = await fetch(url);
-    if (!resp.ok) return null;
-    return url;
-  } catch {
-    // CORS or network error — return URL and let <img> handle it
-    return url;
-  }
+function googleFaviconUrl(domain) {
+  return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=32`;
 }
 
 /**
  * Resolve logo for a sender domain.
- * Chain: BIMI full domain → BIMI root domain → validated root favicon → null (unknown).
- * Also checks subdomain, root, and www favicons in parallel for the detail accordion.
+ * Chain: BIMI → Google root favicon → direct /favicon.ico → caution.
+ * No fetch() validation — <img> on Gmail's page loads Google favicons
+ * fine (has cookies/referer), but fetch() from the service worker gets
+ * different responses due to missing credentials.
  */
 async function resolveLogo(fullDomain) {
   const rootDomain = getRootDomain(fullDomain);
@@ -107,41 +99,27 @@ async function resolveLogo(fullDomain) {
     bimiUrl = await lookupBimi(rootDomain);
   }
 
-  // Check all three favicon variants in parallel
-  const [subGoogle, rootGoogle, wwwGoogle] = await Promise.all([
-    checkFavicon(fullDomain),
-    checkFavicon(rootDomain),
-    checkFavicon(wwwDomain),
-  ]);
-
-  // Main logo uses root domain's Google favicon (skip if BIMI found)
-  const faviconRootUrl = bimiUrl ? null : rootGoogle;
-
-  let logoSource;
-  if (bimiUrl) logoSource = 'bimi';
-  else if (faviconRootUrl) logoSource = 'favicon';
-  else logoSource = 'unknown';
-
   return {
     fullDomain,
     rootDomain,
     logoUrl: bimiUrl,
-    logoSource,
-    faviconRootUrl,
+    logoSource: bimiUrl ? 'bimi' : 'favicon',
+    faviconRootUrl: googleFaviconUrl(rootDomain),
+    faviconDirectUrl: `https://${rootDomain}/favicon.ico`,
     favicons: {
       sub: {
         domain: fullDomain,
-        googleUrl: subGoogle,
+        googleUrl: googleFaviconUrl(fullDomain),
         directUrl: `https://${fullDomain}/favicon.ico`,
       },
       root: {
         domain: rootDomain,
-        googleUrl: rootGoogle,
+        googleUrl: googleFaviconUrl(rootDomain),
         directUrl: `https://${rootDomain}/favicon.ico`,
       },
       www: {
         domain: wwwDomain,
-        googleUrl: wwwGoogle,
+        googleUrl: googleFaviconUrl(wwwDomain),
         directUrl: `https://${wwwDomain}/favicon.ico`,
       },
     },

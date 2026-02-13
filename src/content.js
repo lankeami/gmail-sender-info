@@ -98,6 +98,7 @@
     const chain = [];
     if (info.logoUrl) chain.push({ url: info.logoUrl, source: SOURCE_BIMI });
     if (info.faviconRootUrl) chain.push({ url: info.faviconRootUrl, source: SOURCE_FAVICON });
+    if (info.faviconDirectUrl) chain.push({ url: info.faviconDirectUrl, source: SOURCE_FAVICON });
     chain.push({ url: CAUTION_URL, source: SOURCE_UNKNOWN });
 
     let idx = 0;
