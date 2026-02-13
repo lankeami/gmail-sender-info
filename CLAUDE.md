@@ -43,6 +43,10 @@ gmail-sender-info/
 - `storage` — Cache BIMI/favicon results (24h TTL)
 - `https://dns.google/*` — BIMI DNS-over-HTTPS lookups
 
+## Documentation
+
+When changing external services, security measures, permissions, or the sender safety evaluation process, update the corresponding section in `README.md`.
+
 ## Development
 
 1. Load unpacked at `chrome://extensions/` pointing to this directory
