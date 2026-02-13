@@ -4,7 +4,10 @@
   "version": "1.0.0",
   "description": "Shows sender domain info, logo, and favicon on Gmail inbox rows and email view.",
   "permissions": ["storage"],
-  "host_permissions": ["https://dns.google/*"],
+  "host_permissions": [
+    "https://dns.google/*",
+    "https://*.gstatic.com/*"
+  ],
   "background": {
     "service_worker": "src/background.js"
   },
@@ -14,6 +17,12 @@
       "js": ["src/content.js"],
       "css": ["src/styles.css"],
       "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://mail.google.com/*"],
+      "js": ["src/page-fetch.js"],
+      "run_at": "document_idle",
+      "world": "MAIN"
     }
   ],
   "web_accessible_resources": [
