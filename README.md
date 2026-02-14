@@ -105,8 +105,13 @@ gmail-sender-info/
 │   ├── page-fetch.js       # MAIN world: fetches raw headers using Gmail's session
 │   └── styles.css          # Tooltip, banner, accordion, verdict styles
 ├── images/
-│   ├── icon{16,48,128}.png # Extension icons
-│   └── caution.svg         # Fallback warning icon
+│   ├── icon.svg            # Source SVG for icon (512×512)
+│   ├── icon16.png          # Extension toolbar icon (16×16)
+│   ├── icon48.png          # Extensions management page icon (48×48)
+│   ├── icon128.png         # Chrome Web Store listing icon (128×128)
+│   ├── promo-small.png     # Chrome Web Store small promo tile (440×280)
+│   ├── promo-large.png     # Chrome Web Store large/marquee promo tile (1400×560)
+│   └── caution.svg         # Fallback warning icon for unknown senders
 ├── CLAUDE.md               # Development notes
 └── README.md               # This file
 ```
@@ -131,6 +136,31 @@ gmail-sender-info/
         │◀── auth results ─────────┘
         │
    Render tooltip/banner with logo + verdict
+```
+
+## Chrome Web Store Assets
+
+All store assets live in `images/`. The logo is a `#d6d8ff` rounded square with "GSI" in Google brand colors: **G** (Blue `#4285F4`), **S** (Red `#EA4335`), **I** (Green `#34A853`).
+
+| File | Dimensions | Where It's Used |
+|------|-----------|-----------------|
+| `icon.svg` | 512×512 | Source SVG — re-export PNGs from this if the design changes |
+| `icon16.png` | 16×16 | Extension toolbar icon (referenced in `manifest.json`) |
+| `icon48.png` | 48×48 | `chrome://extensions/` management page (referenced in `manifest.json`) |
+| `icon128.png` | 128×128 | Chrome Web Store listing + install dialog (referenced in `manifest.json`) |
+| `promo-small.png` | 440×280 | Chrome Web Store small promotional tile |
+| `promo-large.png` | 1400×560 | Chrome Web Store large/marquee promotional tile |
+| `caution.svg` | — | In-extension fallback icon for senders with no BIMI or favicon |
+
+### Regenerating Icons
+
+Edit `icon.svg`, then render and resize:
+
+```bash
+qlmanage -t -s 512 -o /tmp/ images/icon.svg
+sips -z 128 128 /tmp/icon.svg.png --out images/icon128.png
+sips -z 48 48 /tmp/icon.svg.png --out images/icon48.png
+sips -z 16 16 /tmp/icon.svg.png --out images/icon16.png
 ```
 
 ## Development
