@@ -84,6 +84,19 @@ window.addEventListener('message', async (event) => {
       const origSenderMatch = stripped.match(/X-Original-Sender[:\s]+([^\s<]+@[^\s>]+)/i);
       if (origSenderMatch) authData.originalSender = origSenderMatch[1].toLowerCase().trim();
 
+      // Extract raw header lines from the stripped HTML text
+      // The full email headers are embedded in the HTML page
+      const headerNames = ['Authentication-Results', 'Received-SPF', 'DKIM-Signature', 'ARC-Authentication-Results'];
+      const rawHeaderLines = {};
+      for (const name of headerNames) {
+        const re = new RegExp(name + '\\s*:[^\\n]+', 'gi');
+        const matches = stripped.match(re);
+        if (matches) rawHeaderLines[name] = matches.map(m => m.replace(/\s+/g, ' ').trim());
+      }
+      if (Object.keys(rawHeaderLines).length > 0) {
+        authData.rawHeaderLines = rawHeaderLines;
+      }
+
       if (Object.keys(authData).length > 0) {
         window.postMessage({ type: 'gsi-headers-result', requestId, authData }, '*');
       } else {

@@ -43,20 +43,54 @@
     return null;
   }
 
+  // --- Context validity check ---
+  // After extension reload/update, the old content script is orphaned.
+  // All chrome.runtime calls will throw "Extension context invalidated".
+  // Detect this and stop the observer so the stale script goes quiet.
+
+  let contextValid = true;
+
+  function isContextValid() {
+    try {
+      return !!chrome.runtime?.id;
+    } catch {
+      return false;
+    }
+  }
+
+  function invalidateContext() {
+    contextValid = false;
+    if (activeObserver) {
+      activeObserver.disconnect();
+      activeObserver = null;
+    }
+    removeBanner();
+    hideTooltip();
+  }
+
   // --- Message passing with dedup ---
 
   function requestSenderInfo(email) {
+    if (!contextValid) return Promise.resolve(null);
     if (pendingRequests.has(email)) return pendingRequests.get(email);
 
     const promise = new Promise((resolve) => {
-      chrome.runtime.sendMessage({ action: 'getSenderInfo', email }, (resp) => {
+      try {
+        chrome.runtime.sendMessage({ action: 'getSenderInfo', email }, (resp) => {
+          pendingRequests.delete(email);
+          if (chrome.runtime.lastError || !resp || resp.error) {
+            // Check if context died during the call
+            if (!isContextValid()) invalidateContext();
+            resolve(null);
+          } else {
+            resolve(resp);
+          }
+        });
+      } catch {
         pendingRequests.delete(email);
-        if (chrome.runtime.lastError || !resp || resp.error) {
-          resolve(null);
-        } else {
-          resolve(resp);
-        }
-      });
+        invalidateContext();
+        resolve(null);
+      }
     });
 
     pendingRequests.set(email, promise);
@@ -127,9 +161,15 @@
       badge.style.display = 'none';
       return;
     }
-    badge.style.display = '';
     badge.className = 'gsi-source-badge gsi-badge-' + sourceKey;
-    badge.textContent = SOURCE_LABELS[sourceKey] || sourceKey;
+    if (sourceKey === SOURCE_BIMI) {
+      // For BIMI: hide by default, security section will show with failures if any
+      badge.textContent = '';
+      badge.style.display = 'none';
+    } else {
+      badge.style.display = '';
+      badge.textContent = SOURCE_LABELS[sourceKey] || sourceKey;
+    }
   }
 
   /**
@@ -314,6 +354,31 @@
     return null;
   }
 
+  /**
+   * Extract full raw header lines by name from email header text.
+   * Returns an object mapping header names to their full unfolded line(s).
+   * Collects all occurrences for headers that may appear multiple times.
+   */
+  function extractRawHeaderLines(headerText, names) {
+    const unfolded = headerText.replace(/\r?\n[ \t]+/g, ' ');
+    const lines = unfolded.split(/\r?\n/);
+    const result = {};
+    const lowerNames = names.map(n => n.toLowerCase());
+
+    for (const line of lines) {
+      const colonIdx = line.indexOf(':');
+      if (colonIdx === -1) continue;
+      const name = line.substring(0, colonIdx).trim().toLowerCase();
+      const idx = lowerNames.indexOf(name);
+      if (idx !== -1) {
+        const key = names[idx];
+        if (!result[key]) result[key] = [];
+        result[key].push(line);
+      }
+    }
+    return result;
+  }
+
   // --- Summary verdict SVGs ---
 
   const VERDICT_TRUSTED_SVG = '<svg viewBox="0 0 24 24" width="36" height="36"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5L12 1z" fill="#4caf50"/><path d="M10 15.5l-3.5-3.5 1.41-1.41L10 12.67l5.59-5.59L17 8.5l-7 7z" fill="#fff"/></svg>';
@@ -339,16 +404,38 @@
     return 'caution';
   }
 
-  function setVerdict(summaryEl, verdictKey) {
+  // Smaller SVGs for the inline banner badge (18×18)
+  const VERDICT_CAUTION_SVG_SM = '<svg viewBox="0 0 24 24" width="18" height="18"><path d="M12 2L1 21h22L12 2z" fill="#F59E0B" stroke="#D97706" stroke-width=".5"/><rect x="11" y="9" width="2" height="6" rx="1" fill="#fff"/><rect x="11" y="17" width="2" height="2" rx="1" fill="#fff"/></svg>';
+  const VERDICT_DANGER_SVG_SM = '<svg viewBox="0 0 24 24" width="18" height="18"><circle cx="12" cy="12" r="11" fill="#ef4444"/><path d="M8 8l8 8M16 8l-8 8" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/></svg>';
+
+  const VERDICTS_SM = {
+    caution:  { svg: VERDICT_CAUTION_SVG_SM, label: 'Use Caution' },
+    dangerous: { svg: VERDICT_DANGER_SVG_SM, label: 'Not Trusted' },
+  };
+
+  function setVerdict(summaryEl, verdictKey, bannerBadgeEl) {
+    // Update inline banner badge
+    if (bannerBadgeEl) {
+      if (verdictKey === 'trusted') {
+        bannerBadgeEl.style.display = 'none';
+      } else {
+        const sm = VERDICTS_SM[verdictKey] || VERDICTS_SM.caution;
+        bannerBadgeEl.style.display = '';
+        bannerBadgeEl.className = 'gsi-banner-verdict gsi-banner-verdict-' + verdictKey;
+        // Safe: hardcoded SVG constants, not user input
+        bannerBadgeEl.querySelector('.gsi-banner-verdict-icon').innerHTML = sm.svg;
+      }
+    }
+
+    // Update accordion summary column
     if (verdictKey === 'trusted') {
-      // All checks pass — hide the summary column entirely
       summaryEl.style.display = 'none';
       return;
     }
     const v = VERDICTS[verdictKey] || VERDICTS.caution;
     summaryEl.className = 'gsi-summary ' + v.cls;
     summaryEl.style.display = '';
-    // Safe: SVGs are hardcoded constants above, not user input
+    // Safe: hardcoded SVG constants, not user input
     summaryEl.querySelector('.gsi-summary-icon').innerHTML = v.svg;
     summaryEl.querySelector('.gsi-summary-label').textContent = v.label;
   }
@@ -357,7 +444,7 @@
    * Build the security checks column and update the summary verdict.
    * Fetches headers async and updates the DOM when results arrive.
    */
-  function createSecuritySection(container, summaryEl, info, envelopeEmail) {
+  function createSecuritySection(container, summaryEl, info, envelopeEmail, bannerBadgeEl, sourceBadgeEl) {
     const sectionHeader = document.createElement('div');
     sectionHeader.classList.add('gsi-col-header');
     sectionHeader.textContent = 'Security';
@@ -373,7 +460,7 @@
       if (!msgResult) {
         loadingRow.textContent = 'Unable to find message ID';
         loadingRow.classList.add('gsi-security-error');
-        setVerdict(summaryEl, 'caution');
+        setVerdict(summaryEl, 'caution', bannerBadgeEl);
         return;
       }
 
@@ -385,7 +472,7 @@
         if (result.error) {
           loadingRow.textContent = `Unable to check (${result.error})`;
           loadingRow.classList.add('gsi-security-error');
-          setVerdict(summaryEl, 'caution');
+          setVerdict(summaryEl, 'caution', bannerBadgeEl);
           return;
         }
         authResults = result.authData || parseAuthResults(result.headers);
@@ -399,7 +486,7 @@
         noResults.classList.add('gsi-security-loading');
         noResults.textContent = 'No auth results found';
         container.appendChild(noResults);
-        setVerdict(summaryEl, 'caution');
+        setVerdict(summaryEl, 'caution', bannerBadgeEl);
         return;
       }
 
@@ -453,8 +540,28 @@
       bimiRow.appendChild(bimiResult);
       container.appendChild(bimiRow);
 
+      const verdictKey = getVerdict(authResults, info);
+
+      // Update source badge based on auth results
+      if (sourceBadgeEl) {
+        const failures = [];
+        for (const { key, label } of checks) {
+          const v = authResults[key];
+          if (v && v !== 'pass' && v !== 'none') {
+            failures.push(`${label}: ${v}`);
+          }
+        }
+        if (failures.length > 0) {
+          sourceBadgeEl.textContent = failures.join(', ');
+          sourceBadgeEl.className = 'gsi-source-badge gsi-source-verdict-' + verdictKey;
+          sourceBadgeEl.style.display = '';
+        } else {
+          sourceBadgeEl.style.display = 'none';
+        }
+      }
+
       // Update summary verdict
-      setVerdict(summaryEl, getVerdict(authResults, info));
+      setVerdict(summaryEl, verdictKey, bannerBadgeEl);
     })();
   }
 
@@ -589,6 +696,15 @@
     const logo = createLogoImg(info, (sourceKey) => updateBadge(sourceBadge, sourceKey));
     topRow.appendChild(logo);
 
+    // Inline verdict badge (between logo and domain, hidden until verdict resolves)
+    const bannerBadge = document.createElement('span');
+    bannerBadge.classList.add('gsi-banner-verdict');
+    bannerBadge.style.display = 'none';
+    const bannerBadgeIcon = document.createElement('span');
+    bannerBadgeIcon.classList.add('gsi-banner-verdict-icon');
+    bannerBadge.appendChild(bannerBadgeIcon);
+    topRow.appendChild(bannerBadge);
+
     const textWrap = document.createElement('div');
     textWrap.classList.add('gsi-banner-text');
 
@@ -675,7 +791,7 @@
       summaryEl.appendChild(summaryIcon);
       summaryEl.appendChild(summaryLabel);
 
-      createSecuritySection(secCol, summaryEl, info, envelopeEmail);
+      createSecuritySection(secCol, summaryEl, info, envelopeEmail, bannerBadge, sourceBadge);
 
       table.appendChild(favCol);
       table.appendChild(secCol);
@@ -759,8 +875,50 @@
       debugHeader.appendChild(debugChevron);
       debugHeader.appendChild(document.createTextNode(' Debug'));
       const debugContent = document.createElement('div');
-      debugContent.style.cssText = 'display:none;font-size:11px;color:#5f6368;margin-top:4px;padding:4px 8px;background:#fff3cd;border-radius:4px;font-family:monospace;word-break:break-all';
-      debugContent.textContent = `envelope: ${envelopeEmail || '(none)'} | X-Original-Sender: ${originalSender || '(not found)'} | path: ${result.authData ? 'HTML' : 'raw'}`;
+      debugContent.style.cssText = 'display:none;font-size:11px;color:#5f6368;margin-top:4px;padding:4px 8px;background:#fff3cd;border-radius:4px;font-family:monospace;word-break:break-all;white-space:pre-wrap';
+      // Build debug lines
+      const debugLines = [
+        `envelope: ${envelopeEmail || '(none)'} | X-Original-Sender: ${originalSender || '(not found)'} | path: ${result.authData ? 'HTML' : 'raw'}`,
+      ];
+
+      if (result.headers) {
+        // Raw headers available — show actual header lines
+        const rawHeaders = extractRawHeaderLines(result.headers, [
+          'Authentication-Results',
+          'Received-SPF',
+          'DKIM-Signature',
+        ]);
+        if (rawHeaders['Authentication-Results']) {
+          for (const line of rawHeaders['Authentication-Results']) {
+            debugLines.push(line);
+          }
+        }
+        if (rawHeaders['Received-SPF']) {
+          for (const line of rawHeaders['Received-SPF']) {
+            debugLines.push(line);
+          }
+        }
+        if (rawHeaders['DKIM-Signature']) {
+          for (const line of rawHeaders['DKIM-Signature']) {
+            debugLines.push(line);
+          }
+        }
+      } else if (result.authData) {
+        // HTML path — show raw header lines if extracted, otherwise parsed values
+        const raw = result.authData.rawHeaderLines;
+        if (raw && Object.keys(raw).length > 0) {
+          for (const [name, lines] of Object.entries(raw)) {
+            for (const line of lines) {
+              debugLines.push(line);
+            }
+          }
+        } else {
+          debugLines.push(`SPF: ${result.authData.spf || 'n/a'} | DKIM: ${result.authData.dkim || 'n/a'} | DMARC: ${result.authData.dmarc || 'n/a'} (raw headers not available)`);
+        }
+      }
+      debugLines.push(`BIMI: ${info.logoSource === 'bimi' ? 'pass (DNS)' : 'none'}`);
+
+      debugContent.textContent = debugLines.join('\n');
       debugHeader.addEventListener('click', () => {
         const isOpen = debugContent.style.display === 'block';
         debugContent.style.display = isOpen ? 'none' : 'block';
@@ -934,8 +1092,11 @@
   // --- MutationObserver ---
 
   let observerActive = false;
+  let activeObserver = null;
 
   function scan() {
+    if (!contextValid) return;
+
     // Process inbox rows
     const rows = document.querySelectorAll('.zA:not([data-gsi-processed])');
     rows.forEach(processInboxRow);
@@ -957,11 +1118,11 @@
     // Initial scan
     scan();
 
-    const observer = new MutationObserver(() => {
+    activeObserver = new MutationObserver(() => {
       scan();
     });
 
-    observer.observe(document.body, { childList: true, subtree: true });
+    activeObserver.observe(document.body, { childList: true, subtree: true });
   }
 
   // Wait for Gmail to load, then start

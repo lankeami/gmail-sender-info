@@ -285,6 +285,36 @@
   color: #8a6d3b;
 }
 
+/* --- Inline banner verdict badge (top row, between logo and domain) --- */
+
+.gsi-banner-verdict {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.gsi-banner-verdict-icon {
+  line-height: 1;
+  display: flex;
+  align-items: center;
+}
+
+.gsi-banner-verdict-icon svg {
+  display: block;
+}
+
+.gsi-banner-verdict-caution {
+  background: #fff3e0;
+  color: #e65100;
+}
+
+.gsi-banner-verdict-dangerous {
+  background: #ffebee;
+  color: #c62828;
+}
+
 /* --- Shared --- */
 
 .gsi-logo {
@@ -317,6 +347,15 @@
 
 /* Unknown / caution fallback — red */
 .gsi-source-badge.gsi-badge-unknown {
+  color: #c62828;
+}
+
+/* Source badge colored by verdict */
+.gsi-source-badge.gsi-source-verdict-caution {
+  color: #e65100;
+}
+
+.gsi-source-badge.gsi-source-verdict-dangerous {
   color: #c62828;
 }
 
