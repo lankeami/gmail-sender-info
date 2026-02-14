@@ -2,6 +2,31 @@
 
 Chrome extension that displays sender domain information and email authentication results directly in Gmail. Shows a tooltip on inbox row hover and a detailed banner when viewing an email.
 
+## Table of Contents
+
+- [External Services](#external-services)
+- [Security Measures](#security-measures)
+  - [Permissions (Minimal)](#permissions-minimal)
+  - [Header Fetching Without Extra Permissions](#header-fetching-without-extra-permissions)
+  - [Content Security](#content-security)
+  - [Caching](#caching)
+- [How Sender Safety Is Determined](#how-sender-safety-is-determined)
+  - [1. Logo Resolution Chain](#1-logo-resolution-chain)
+  - [2. Email Authentication Checks](#2-email-authentication-checks)
+  - [3. Mailing List / Google Groups Resolution](#3-mailing-list--google-groups-resolution)
+  - [4. Verdict Logic](#4-verdict-logic)
+- [Architecture](#architecture)
+  - [Message Flow](#message-flow)
+- [Chrome Web Store Assets](#chrome-web-store-assets)
+  - [Regenerating Icons](#regenerating-icons)
+- [Development](#development)
+
+### Chrome Web Store Documents
+
+- [Privacy Policy](https://lankeami.github.io/gmail-sender-info/privacy-policy.html)
+- [Terms of Service](https://lankeami.github.io/gmail-sender-info/terms-of-service.html)
+- [Support & FAQ](https://lankeami.github.io/gmail-sender-info/support.html)
+
 ## External Services
 
 | Service | URL | Purpose |
