@@ -52,10 +52,10 @@ When a sender email is encountered, the background service worker resolves a log
 4. **Direct `/favicon.ico`** -- Falls back to `https://{root-domain}/favicon.ico`.
 5. **Caution icon** -- If all above fail, displays a yellow warning triangle (`caution.svg`).
 
-The resolved logo source is shown as a badge:
-- **"BIMI verified"** (green) -- Domain publishes a BIMI record with a verified SVG logo
-- **"favicon"** (orange) -- Logo came from the favicon service, not a verified BIMI record
-- **"unknown"** (red) -- No logo could be resolved; caution icon is displayed
+The resolved logo source determines the badge behavior:
+- **BIMI** -- If all auth checks pass, the source badge is hidden (no warning needed). If any check fails or softfails, the badge shows the failures (e.g. "SPF: softfail") colored to match the verdict (orange for caution, red for dangerous).
+- **Favicon** -- Badge is hidden. Logo came from the favicon service, not a verified BIMI record.
+- **Unknown** (red) -- No logo could be resolved; caution icon is displayed, badge shows "unknown".
 
 ### 2. Email Authentication Checks
 
@@ -88,9 +88,11 @@ The extension combines the authentication results into a single verdict:
 
 | Verdict | Condition | Display |
 |---------|-----------|---------|
-| **Trusted** | SPF pass AND DKIM pass AND DMARC pass | Banner hides the verdict column (no warning needed) |
-| **Not Trusted** | DMARC fail, OR DKIM fail, OR (SPF fail AND DKIM not pass) | Red X icon with "Not Trusted" label |
-| **Use Caution** | Everything else (partial passes, missing results, errors) | Yellow triangle with "Use Caution" label |
+| **Trusted** | SPF pass AND DKIM pass AND DMARC pass | Verdict badge and accordion summary both hidden |
+| **Not Trusted** | DMARC fail, OR DKIM fail, OR (SPF fail AND DKIM not pass) | Red X icon in banner top row; red "Not Trusted" in accordion |
+| **Use Caution** | Everything else (partial passes, missing results, errors) | Amber triangle in banner top row; orange "Use Caution" in accordion |
+
+The verdict appears in two places: an **inline badge** in the banner top row (between the logo and the domain text, icon only) and the **accordion summary column** (icon + label). Both are hidden when the verdict is "Trusted".
 
 If headers cannot be fetched (timeout, missing message ID, etc.), the verdict defaults to **Use Caution**.
 
