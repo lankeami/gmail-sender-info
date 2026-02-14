@@ -123,6 +123,11 @@
    * Apply the correct class and label to a badge element based on resolved source.
    */
   function updateBadge(badge, sourceKey) {
+    if (sourceKey === SOURCE_FAVICON) {
+      badge.style.display = 'none';
+      return;
+    }
+    badge.style.display = '';
     badge.className = 'gsi-source-badge gsi-badge-' + sourceKey;
     badge.textContent = SOURCE_LABELS[sourceKey] || sourceKey;
   }
@@ -293,6 +298,22 @@
     return Object.keys(results).length > 0 ? results : null;
   }
 
+  /**
+   * Parse X-Original-Sender from raw email headers (non-HTML path).
+   * Returns { originalSender } or null.
+   */
+  function parseMailingListHeaders(headerText) {
+    const unfolded = headerText.replace(/\r?\n[ \t]+/g, ' ');
+    const lines = unfolded.split(/\r?\n/);
+    for (const line of lines) {
+      if (line.toLowerCase().startsWith('x-original-sender:')) {
+        const value = line.substring('x-original-sender:'.length).trim().toLowerCase();
+        if (value && value.includes('@')) return { originalSender: value };
+      }
+    }
+    return null;
+  }
+
   // --- Summary verdict SVGs ---
 
   const VERDICT_TRUSTED_SVG = '<svg viewBox="0 0 24 24" width="36" height="36"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5L12 1z" fill="#4caf50"/><path d="M10 15.5l-3.5-3.5 1.41-1.41L10 12.67l5.59-5.59L17 8.5l-7 7z" fill="#fff"/></svg>';
@@ -336,7 +357,7 @@
    * Build the security checks column and update the summary verdict.
    * Fetches headers async and updates the DOM when results arrive.
    */
-  function createSecuritySection(container, summaryEl, info) {
+  function createSecuritySection(container, summaryEl, info, envelopeEmail) {
     const sectionHeader = document.createElement('div');
     sectionHeader.classList.add('gsi-col-header');
     sectionHeader.textContent = 'Security';
@@ -451,7 +472,7 @@
     return tooltipEl;
   }
 
-  function showTooltip(row, info) {
+  function showTooltip(row, info, viaEmail) {
     const tip = ensureTooltip();
 
     // Clear previous content safely
@@ -481,6 +502,28 @@
 
     // Row 3: source badge (colored by onload callback)
     tip.appendChild(sourceBadge);
+
+    // Row 4: "via" badge from original sender cache or Gmail row text
+    if (viaEmail) {
+      const viaBadge = document.createElement('div');
+      viaBadge.classList.add('gsi-via-badge');
+      viaBadge.textContent = `via ${viaEmail.split('@')[1]}`;
+      viaBadge.style.marginTop = '4px';
+      tip.appendChild(viaBadge);
+    } else {
+      const ywEl = row.querySelector('.yW');
+      if (ywEl) {
+        const rowText = ywEl.textContent || '';
+        const viaMatch = rowText.match(/via\s+(\S+)/i);
+        if (viaMatch) {
+          const viaBadge = document.createElement('div');
+          viaBadge.classList.add('gsi-via-badge');
+          viaBadge.textContent = `via ${viaMatch[1]}`;
+          viaBadge.style.marginTop = '4px';
+          tip.appendChild(viaBadge);
+        }
+      }
+    }
 
     // Position below the row
     const rect = row.getBoundingClientRect();
@@ -526,7 +569,7 @@
     currentBannerEmail = null;
   }
 
-  function insertBanner(info) {
+  function insertBanner(info, envelopeEmail) {
     removeBanner();
 
     const subjectEl = document.querySelector('.hP');
@@ -541,6 +584,7 @@
 
     const sourceBadge = document.createElement('span');
     sourceBadge.classList.add('gsi-source-badge');
+    sourceBadge.style.display = 'none';
 
     const logo = createLogoImg(info, (sourceKey) => updateBadge(sourceBadge, sourceKey));
     topRow.appendChild(logo);
@@ -631,7 +675,7 @@
       summaryEl.appendChild(summaryIcon);
       summaryEl.appendChild(summaryLabel);
 
-      createSecuritySection(secCol, summaryEl, info);
+      createSecuritySection(secCol, summaryEl, info, envelopeEmail);
 
       table.appendChild(favCol);
       table.appendChild(secCol);
@@ -663,6 +707,215 @@
     }
 
     currentBannerEmail = info.fullDomain;
+
+    // Detect original sender for Google Groups / mailing list emails
+    (async () => {
+      const msgResult = getMessageId();
+      if (!msgResult) return;
+
+      const result = await fetchEmailHeaders(msgResult.id);
+      if (result.error) return;
+
+      let originalSender = null;
+      if (result.authData?.originalSender) {
+        originalSender = result.authData.originalSender;
+      } else if (result.headers) {
+        const ml = parseMailingListHeaders(result.headers);
+        if (ml) originalSender = ml.originalSender;
+      }
+
+      // Find or create accordion content area for debug + original sender rows
+      let accordionContent = banner.querySelector('.gsi-accordion-content');
+      if (!accordionContent) {
+        const accordion = document.createElement('div');
+        accordion.classList.add('gsi-accordion');
+        const accHeader = document.createElement('div');
+        accHeader.classList.add('gsi-accordion-header');
+        const chevron = document.createElement('span');
+        chevron.classList.add('gsi-chevron');
+        chevron.textContent = '\u25B6';
+        accHeader.appendChild(chevron);
+        accHeader.appendChild(document.createTextNode(' Details'));
+        accordionContent = document.createElement('div');
+        accordionContent.classList.add('gsi-accordion-content');
+        accHeader.addEventListener('click', () => {
+          const isOpen = accordionContent.style.display === 'block';
+          accordionContent.style.display = isOpen ? 'none' : 'block';
+          chevron.textContent = isOpen ? '\u25B6' : '\u25BC';
+        });
+        accordion.appendChild(accHeader);
+        accordion.appendChild(accordionContent);
+        banner.appendChild(accordion);
+      }
+
+      // DEBUG: collapsible section in accordion (collapsed by default)
+      const debugWrap = document.createElement('div');
+      debugWrap.style.cssText = 'margin-top:6px;border-top:1px solid #e8eaed;padding-top:4px';
+      const debugHeader = document.createElement('div');
+      debugHeader.style.cssText = 'font-size:10px;color:#80868b;cursor:pointer;user-select:none';
+      const debugChevron = document.createElement('span');
+      debugChevron.style.cssText = 'font-size:9px;display:inline-block;transition:transform 0.15s';
+      debugChevron.textContent = '\u25B6';
+      debugHeader.appendChild(debugChevron);
+      debugHeader.appendChild(document.createTextNode(' Debug'));
+      const debugContent = document.createElement('div');
+      debugContent.style.cssText = 'display:none;font-size:11px;color:#5f6368;margin-top:4px;padding:4px 8px;background:#fff3cd;border-radius:4px;font-family:monospace;word-break:break-all';
+      debugContent.textContent = `envelope: ${envelopeEmail || '(none)'} | X-Original-Sender: ${originalSender || '(not found)'} | path: ${result.authData ? 'HTML' : 'raw'}`;
+      debugHeader.addEventListener('click', () => {
+        const isOpen = debugContent.style.display === 'block';
+        debugContent.style.display = isOpen ? 'none' : 'block';
+        debugChevron.textContent = isOpen ? '\u25B6' : '\u25BC';
+      });
+      debugWrap.appendChild(debugHeader);
+      debugWrap.appendChild(debugContent);
+      accordionContent.appendChild(debugWrap);
+
+      if (!originalSender || !envelopeEmail || originalSender === envelopeEmail) return;
+
+      const origInfo = await requestSenderInfo(originalSender);
+      if (!origInfo) return;
+
+      // Update banner top row with original sender info
+      const oldLogo = banner.querySelector('.gsi-logo');
+      const bannerText = banner.querySelector('.gsi-banner-text');
+      const oldBadge = bannerText?.querySelector('.gsi-source-badge');
+      if (oldLogo && bannerText) {
+        const newBadge = document.createElement('span');
+        newBadge.classList.add('gsi-source-badge');
+        newBadge.style.display = 'none';
+        const newLogo = createLogoImg(origInfo, (sourceKey) => updateBadge(newBadge, sourceKey));
+        oldLogo.replaceWith(newLogo);
+        if (oldBadge) oldBadge.replaceWith(newBadge);
+        else bannerText.appendChild(newBadge);
+
+        const domainEl = bannerText.querySelector('.gsi-banner-domain');
+        if (domainEl) domainEl.textContent = origInfo.fullDomain;
+
+        const rootEl = bannerText.querySelector('.gsi-banner-root');
+        if (origInfo.rootDomain !== origInfo.fullDomain) {
+          if (rootEl) {
+            rootEl.textContent = `(${origInfo.rootDomain})`;
+          } else {
+            const newRoot = document.createElement('span');
+            newRoot.classList.add('gsi-banner-root');
+            newRoot.textContent = `(${origInfo.rootDomain})`;
+            bannerText.appendChild(newRoot);
+          }
+        } else if (rootEl) {
+          rootEl.remove();
+        }
+
+        const groupDomain = envelopeEmail.split('@')[1];
+        const viaBadge = document.createElement('span');
+        viaBadge.classList.add('gsi-via-badge');
+        viaBadge.textContent = `via ${groupDomain}`;
+        bannerText.appendChild(viaBadge);
+      }
+
+      // Add original sender row to accordion: favicons + security
+      const origSection = document.createElement('div');
+      origSection.style.cssText = 'margin-top:8px;padding-top:8px;border-top:1px solid #e8eaed';
+
+      const origLabel = document.createElement('div');
+      origLabel.classList.add('gsi-col-header');
+      origLabel.textContent = `Original Sender — ${origInfo.fullDomain}`;
+      origSection.appendChild(origLabel);
+
+      const origTable = document.createElement('div');
+      origTable.classList.add('gsi-details-table');
+
+      // Original sender favicons column
+      const origFavCol = document.createElement('div');
+      origFavCol.classList.add('gsi-details-col');
+      const origFavHeader = document.createElement('div');
+      origFavHeader.classList.add('gsi-col-header');
+      origFavHeader.textContent = 'Favicons';
+      origFavCol.appendChild(origFavHeader);
+
+      if (origInfo.favicons) {
+        const labels = { sub: 'subdomain', root: 'root', www: 'www' };
+        for (const [key, label] of Object.entries(labels)) {
+          const fav = origInfo.favicons[key];
+          if (!fav) continue;
+          const row = document.createElement('div');
+          row.classList.add('gsi-detail-row');
+          row.appendChild(createDetailFaviconImg(fav));
+          const dl = document.createElement('span');
+          dl.classList.add('gsi-detail-label');
+          dl.textContent = label;
+          row.appendChild(dl);
+          const dv = document.createElement('span');
+          dv.classList.add('gsi-detail-domain');
+          dv.textContent = fav.domain;
+          row.appendChild(dv);
+          origFavCol.appendChild(row);
+        }
+      }
+
+      // Original sender security column
+      const origSecCol = document.createElement('div');
+      origSecCol.classList.add('gsi-details-col');
+      const origSecHeader = document.createElement('div');
+      origSecHeader.classList.add('gsi-col-header');
+      origSecHeader.textContent = 'Security';
+      origSecCol.appendChild(origSecHeader);
+
+      // Parse auth results for original sender from the same headers
+      let origAuth = result.authData || null;
+      if (!origAuth && result.headers) origAuth = parseAuthResults(result.headers);
+
+      const checks = [
+        { key: 'spf', label: 'SPF' },
+        { key: 'dkim', label: 'DKIM' },
+        { key: 'dmarc', label: 'DMARC' },
+      ];
+      for (const check of checks) {
+        const row = document.createElement('div');
+        row.classList.add('gsi-security-row');
+        const lbl = document.createElement('span');
+        lbl.classList.add('gsi-security-label');
+        lbl.textContent = check.label;
+        row.appendChild(lbl);
+        const res = document.createElement('span');
+        res.classList.add('gsi-security-result');
+        const value = origAuth?.[check.key];
+        if (value) {
+          res.textContent = value;
+          if (value === 'pass') res.classList.add('gsi-result-pass');
+          else if (value === 'fail' || value === 'softfail') res.classList.add('gsi-result-fail');
+          else res.classList.add('gsi-result-neutral');
+        } else {
+          res.textContent = 'n/a';
+          res.classList.add('gsi-result-neutral');
+        }
+        row.appendChild(res);
+        origSecCol.appendChild(row);
+      }
+
+      // BIMI for original sender
+      const bimiRow = document.createElement('div');
+      bimiRow.classList.add('gsi-security-row');
+      const bimiLbl = document.createElement('span');
+      bimiLbl.classList.add('gsi-security-label');
+      bimiLbl.textContent = 'BIMI';
+      bimiRow.appendChild(bimiLbl);
+      const bimiRes = document.createElement('span');
+      bimiRes.classList.add('gsi-security-result');
+      if (origInfo.logoSource === 'bimi') {
+        bimiRes.textContent = 'pass';
+        bimiRes.classList.add('gsi-result-pass');
+      } else {
+        bimiRes.textContent = 'none';
+        bimiRes.classList.add('gsi-result-neutral');
+      }
+      bimiRow.appendChild(bimiRes);
+      origSecCol.appendChild(bimiRow);
+
+      origTable.appendChild(origFavCol);
+      origTable.appendChild(origSecCol);
+      origSection.appendChild(origTable);
+      accordionContent.appendChild(origSection);
+    })();
   }
 
   async function processEmailView() {
@@ -675,7 +928,7 @@
 
     const info = await requestSenderInfo(email);
     if (!info) return;
-    insertBanner(info);
+    insertBanner(info, email);
   }
 
   // --- MutationObserver ---

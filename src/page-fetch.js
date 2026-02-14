@@ -81,6 +81,9 @@ window.addEventListener('message', async (event) => {
       const dmarcMatch = stripped.match(/\bDMARC:\s*'?(PASS|FAIL|BESTGUESSPASS|NONE|TEMPERROR|PERMERROR)\b/i);
       if (dmarcMatch) authData.dmarc = dmarcMatch[1].toLowerCase();
 
+      const origSenderMatch = stripped.match(/X-Original-Sender[:\s]+([^\s<]+@[^\s>]+)/i);
+      if (origSenderMatch) authData.originalSender = origSenderMatch[1].toLowerCase().trim();
+
       if (Object.keys(authData).length > 0) {
         window.postMessage({ type: 'gsi-headers-result', requestId, authData }, '*');
       } else {

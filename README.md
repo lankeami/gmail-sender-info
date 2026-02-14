@@ -69,7 +69,20 @@ When viewing an email, the extension fetches the raw message headers from Gmail'
 
 Each check is displayed with a pass/fail/neutral badge in the banner's details accordion.
 
-### 3. Verdict Logic
+### 3. Mailing List / Google Groups Resolution
+
+When an email arrives via a Google Groups address or mailing list, Gmail's DOM shows the **group address** as the sender. The extension detects the real sender using the `X-Original-Sender` header:
+
+1. Headers are fetched for the security checks (already happening).
+2. If `X-Original-Sender` is present and differs from the envelope sender, the extension fetches sender info for the original sender.
+3. The banner updates progressively: it initially shows the group domain, then replaces it with the original sender's domain, logo, and source badge.
+4. A gray "via groupdomain.com" pill badge is appended to indicate the email was relayed through a group.
+
+The security verdict (SPF/DKIM/DMARC) continues to reflect the **delivery path** through the group relay, which is the correct behavior -- those checks verify what actually delivered the email.
+
+For inbox row tooltips, if Gmail displays "via GroupName" text in the row, the tooltip includes a matching "via" indicator.
+
+### 4. Verdict Logic
 
 The extension combines the authentication results into a single verdict:
 
