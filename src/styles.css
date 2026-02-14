@@ -39,58 +39,67 @@
 /* --- Banner (email view) --- */
 
 #gsi-banner {
-  padding: 8px 14px;
-  margin-bottom: 8px;
-  background: #f8f9fa;
-  border: 1px solid #dadce0;
-  border-radius: 8px;
+  padding: 16px 20px;
+  margin-bottom: 10px;
+  background: #d6d8ff;
+  border: 1px solid #f0c78a;
+  border-radius: 10px;
   font-family: 'Google Sans', Roboto, Arial, sans-serif;
   font-size: 13px;
-  color: #202124;
+  color: #3d2800;
   box-sizing: border-box;
+}
+
+#gsi-banner .gsi-logo {
+  width: 40px;
+  height: 40px;
+  border-radius: 6px;
 }
 
 .gsi-banner-top {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 14px;
 }
 
 .gsi-banner-text {
   display: flex;
-  align-items: center;
-  gap: 6px;
+  align-items: baseline;
+  gap: 8px;
   flex-wrap: wrap;
 }
 
 .gsi-banner-domain {
-  font-weight: 500;
+  font-size: 22px;
+  font-weight: 600;
+  color: #3d2800;
   word-break: break-all;
+  letter-spacing: -0.3px;
 }
 
 .gsi-banner-root {
-  color: #5f6368;
-  font-size: 12px;
+  color: #8a6d3b;
+  font-size: 16px;
 }
 
 /* --- Accordion --- */
 
 .gsi-accordion {
-  margin-top: 6px;
-  border-top: 1px solid #e8eaed;
-  padding-top: 4px;
+  margin-top: 10px;
+  border-top: 1px solid #e8cfa0;
+  padding-top: 6px;
 }
 
 .gsi-accordion-header {
   cursor: pointer;
   font-size: 11px;
-  color: #5f6368;
+  color: #8a6d3b;
   user-select: none;
   padding: 2px 0;
 }
 
 .gsi-accordion-header:hover {
-  color: #202124;
+  color: #3d2800;
 }
 
 .gsi-chevron {
@@ -103,10 +112,9 @@
   display: none;
   padding: 8px 10px;
   margin-top: 6px;
-  background: #fff;
-  border: 1px solid #e0e0e0;
+  background: #fff9f0;
+  border: 1px solid #e8cfa0;
   border-radius: 6px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
   white-space: nowrap;
 }
 
@@ -126,12 +134,12 @@
 .gsi-col-header {
   font-size: 10px;
   font-weight: 600;
-  color: #80868b;
+  color: #8a6d3b;
   text-transform: uppercase;
   letter-spacing: 0.5px;
   margin-bottom: 6px;
   padding-bottom: 3px;
-  border-bottom: 1px solid #eee;
+  border-bottom: 1px solid #e8cfa0;
 }
 
 /* --- Favicon detail rows (column 1) --- */
@@ -154,13 +162,13 @@
 
 .gsi-detail-label {
   font-size: 11px;
-  color: #80868b;
+  color: #8a6d3b;
   min-width: 55px;
 }
 
 .gsi-detail-domain {
   font-size: 11px;
-  color: #202124;
+  color: #3d2800;
 }
 
 /* --- Security checks (column 2) --- */
@@ -174,7 +182,7 @@
 
 .gsi-security-label {
   font-size: 11px;
-  color: #80868b;
+  color: #8a6d3b;
   min-width: 42px;
   font-weight: 500;
 }
@@ -205,7 +213,7 @@
 
 .gsi-security-loading {
   font-size: 11px;
-  color: #80868b;
+  color: #8a6d3b;
   font-style: italic;
   padding: 2px 0;
 }
@@ -254,7 +262,7 @@
 }
 
 .gsi-verdict-caution {
-  background: #fff8e1;
+  background: #fff3e0;
 }
 
 .gsi-verdict-caution .gsi-summary-label {
@@ -270,11 +278,11 @@
 }
 
 .gsi-verdict-loading {
-  background: #f5f5f5;
+  background: #fff9f0;
 }
 
 .gsi-verdict-loading .gsi-summary-label {
-  color: #80868b;
+  color: #8a6d3b;
 }
 
 /* --- Shared --- */
@@ -315,11 +323,11 @@
 /* Via badge — mailing list / Google Groups indicator */
 .gsi-via-badge {
   display: inline-block;
-  padding: 1px 6px;
-  font-size: 10px;
+  padding: 2px 8px;
+  font-size: 12px;
   font-weight: 500;
-  color: #5f6368;
-  background: #e8eaed;
+  color: #8a6d3b;
+  background: #f0dbb8;
   border-radius: 4px;
   letter-spacing: 0.3px;
 }
