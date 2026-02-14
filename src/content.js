@@ -1081,6 +1081,10 @@
     if (!email) return;
 
     const domain = email.split('@')[1];
+    // If Gmail keyboard navigation destroyed the banner DOM, reset tracking
+    if (currentBannerEmail && !document.getElementById('gsi-banner')) {
+      currentBannerEmail = null;
+    }
     // Don't re-insert if already showing for this domain
     if (currentBannerEmail === domain) return;
 
