@@ -102,6 +102,8 @@ The inline verdict badge (`.gsi-banner-verdict`) in the top row mirrors the acco
 | Caution | `.gsi-banner-verdict-caution` | 18×18 amber triangle, orange background |
 | Dangerous | `.gsi-banner-verdict-dangerous` | 18×18 red circle with X, red background |
 
+**Logo-source override:** If the logo chain falls through to caution.svg (source = unknown), the verdict is capped at caution even if SPF/DKIM/DMARC all pass. This is coordinated via a shared `bannerState` object between the async logo resolution and security check — whichever completes second applies the override.
+
 ### Debug Section
 
 Collapsible section inside the details accordion. Shows:

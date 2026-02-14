@@ -444,7 +444,7 @@
    * Build the security checks column and update the summary verdict.
    * Fetches headers async and updates the DOM when results arrive.
    */
-  function createSecuritySection(container, summaryEl, info, envelopeEmail, bannerBadgeEl, sourceBadgeEl) {
+  function createSecuritySection(container, summaryEl, info, envelopeEmail, bannerBadgeEl, sourceBadgeEl, bannerState) {
     const sectionHeader = document.createElement('div');
     sectionHeader.classList.add('gsi-col-header');
     sectionHeader.textContent = 'Security';
@@ -540,7 +540,12 @@
       bimiRow.appendChild(bimiResult);
       container.appendChild(bimiRow);
 
-      const verdictKey = getVerdict(authResults, info);
+      let verdictKey = getVerdict(authResults, info);
+      // No recognizable logo → cap verdict at caution
+      if (bannerState && bannerState.resolvedLogoSource === SOURCE_UNKNOWN && verdictKey === 'trusted') {
+        verdictKey = 'caution';
+      }
+      if (bannerState) bannerState.authVerdict = verdictKey;
 
       // Update source badge based on auth results
       if (sourceBadgeEl) {
@@ -693,7 +698,19 @@
     sourceBadge.classList.add('gsi-source-badge');
     sourceBadge.style.display = 'none';
 
-    const logo = createLogoImg(info, (sourceKey) => updateBadge(sourceBadge, sourceKey));
+    // Shared state to coordinate async logo resolution and security verdict.
+    // If logo resolves to unknown (no BIMI, no favicon), verdict caps at caution.
+    const bannerState = { resolvedLogoSource: null, authVerdict: null };
+    let summaryElRef = null;
+
+    const logo = createLogoImg(info, (sourceKey) => {
+      updateBadge(sourceBadge, sourceKey);
+      bannerState.resolvedLogoSource = sourceKey;
+      // No recognizable logo → override trusted verdict to caution
+      if (sourceKey === SOURCE_UNKNOWN && bannerState.authVerdict === 'trusted') {
+        if (summaryElRef) setVerdict(summaryElRef, 'caution', bannerBadge);
+      }
+    });
     topRow.appendChild(logo);
 
     // Inline verdict badge (between logo and domain, hidden until verdict resolves)
@@ -783,6 +800,7 @@
       // Column 3: Summary verdict
       const summaryEl = document.createElement('div');
       summaryEl.classList.add('gsi-summary', 'gsi-verdict-loading');
+      summaryElRef = summaryEl;
       const summaryIcon = document.createElement('div');
       summaryIcon.classList.add('gsi-summary-icon');
       const summaryLabel = document.createElement('div');
@@ -791,7 +809,7 @@
       summaryEl.appendChild(summaryIcon);
       summaryEl.appendChild(summaryLabel);
 
-      createSecuritySection(secCol, summaryEl, info, envelopeEmail, bannerBadge, sourceBadge);
+      createSecuritySection(secCol, summaryEl, info, envelopeEmail, bannerBadge, sourceBadge, bannerState);
 
       table.appendChild(favCol);
       table.appendChild(secCol);
