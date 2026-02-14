@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Privacy Policy — Gmail Sender Info</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #1a1a1a; line-height: 1.7; background: #fafafa; }
+    header { background: #fff; border-bottom: 1px solid #e0e0e0; padding: 1.5rem 2rem; }
+    header a { color: #4285F4; text-decoration: none; font-size: 0.9rem; }
+    header a:hover { text-decoration: underline; }
+    main { max-width: 720px; margin: 2rem auto; padding: 0 1.5rem; }
+    h1 { font-size: 1.8rem; margin-bottom: 0.25rem; }
+    .subtitle { color: #666; font-size: 0.9rem; margin-bottom: 2rem; }
+    h2 { font-size: 1.2rem; margin-top: 2rem; margin-bottom: 0.5rem; color: #333; }
+    p, li { font-size: 0.95rem; margin-bottom: 0.75rem; }
+    ul { padding-left: 1.5rem; }
+    table { width: 100%; border-collapse: collapse; margin: 1rem 0; font-size: 0.9rem; }
+    th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #e0e0e0; }
+    th { background: #f5f5f5; font-weight: 600; }
+    code { background: #f0f0f0; padding: 0.1rem 0.35rem; border-radius: 3px; font-size: 0.85rem; }
+    footer { max-width: 720px; margin: 3rem auto 2rem; padding: 0 1.5rem; font-size: 0.8rem; color: #999; border-top: 1px solid #e0e0e0; padding-top: 1rem; }
+  </style>
+</head>
+<body>
+  <header>
+    <a href="index.html">&larr; Gmail Sender Info</a>
+  </header>
+  <main>
+    <h1>Privacy Policy</h1>
+    <p class="subtitle">Effective date: February 14, 2026</p>
+
+    <p>Gmail Sender Info ("the Extension") is a Chrome browser extension that displays sender domain information, brand logos, and email authentication results in Gmail. This policy describes what data the Extension accesses, how it is used, and your rights.</p>
+
+    <h2>1. Data the Extension Accesses</h2>
+    <p>The Extension processes the following data <strong>locally in your browser</strong>:</p>
+    <ul>
+      <li><strong>Sender email addresses</strong> — extracted from the Gmail page to look up domain and logo information.</li>
+      <li><strong>Email headers</strong> — fetched from Gmail's own servers using your existing session to check SPF, DKIM, and DMARC authentication results.</li>
+      <li><strong>Sender domain names</strong> — derived from email addresses to perform BIMI DNS lookups and favicon resolution.</li>
+    </ul>
+    <p>The Extension does <strong>not</strong> access email body content, attachments, contacts, or any other personal information.</p>
+
+    <h2>2. External Services</h2>
+    <p>The Extension communicates only with Google-operated services:</p>
+    <table>
+      <thead>
+        <tr><th>Service</th><th>Data Sent</th><th>Purpose</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Google DNS-over-HTTPS (<code>dns.google</code>)</td>
+          <td>Sender domain name</td>
+          <td>Look up BIMI TXT records to find verified brand logos</td>
+        </tr>
+        <tr>
+          <td>Google Favicon Service</td>
+          <td>Sender domain name</td>
+          <td>Retrieve website favicons for sender domains</td>
+        </tr>
+        <tr>
+          <td>gstatic Favicon V2</td>
+          <td>Sender domain name</td>
+          <td>Detect whether a real favicon exists (vs. generic globe icon)</td>
+        </tr>
+        <tr>
+          <td>Gmail (<code>mail.google.com</code>)</td>
+          <td>Message ID</td>
+          <td>Fetch raw email headers for authentication checks using your existing session</td>
+        </tr>
+      </tbody>
+    </table>
+    <p>No data is sent to any third-party analytics, advertising, or tracking service. The Extension does not communicate with any non-Google server.</p>
+
+    <h2>3. Data Storage</h2>
+    <p>Lookup results (domain names, logo URLs, and favicon URLs) are cached locally in your browser using Chrome's <code>storage.local</code> API. Cache entries expire after <strong>24 hours</strong> and are automatically cleared when the Extension is installed or updated. No data is stored outside your browser.</p>
+
+    <h2>4. Data Collection</h2>
+    <p>The Extension does <strong>not</strong> collect, transmit, or store any personal data on external servers. Specifically:</p>
+    <ul>
+      <li>No analytics or telemetry</li>
+      <li>No user accounts or identifiers</li>
+      <li>No tracking pixels, beacons, or cookies</li>
+      <li>No behavioral data (clicks, page views, interaction patterns)</li>
+      <li>No email content or attachments</li>
+    </ul>
+
+    <h2>5. Permissions</h2>
+    <table>
+      <thead>
+        <tr><th>Permission</th><th>Why It's Needed</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>storage</code></td>
+          <td>Cache BIMI and favicon lookup results locally (24-hour TTL)</td>
+        </tr>
+        <tr>
+          <td><code>https://dns.google/*</code></td>
+          <td>BIMI DNS-over-HTTPS lookups for verified brand logos</td>
+        </tr>
+        <tr>
+          <td><code>https://*.gstatic.com/*</code></td>
+          <td>Detect generic globe icons to determine if a real favicon exists</td>
+        </tr>
+      </tbody>
+    </table>
+    <p>The Extension does not request access to browsing history, cookies, bookmarks, or any broad host permissions.</p>
+
+    <h2>6. Data Sharing</h2>
+    <p>The Extension does not sell, trade, or transfer any user data to third parties. No data leaves your browser except the domain-name queries to Google services described in Section 2.</p>
+
+    <h2>7. Security</h2>
+    <ul>
+      <li>All DOM elements are created programmatically — no untrusted HTML injection.</li>
+      <li>Input validation rejects malformed email addresses before processing.</li>
+      <li>Header fetches use your existing Gmail session (same-origin); no additional credentials are stored or transmitted.</li>
+    </ul>
+
+    <h2>8. Children's Privacy</h2>
+    <p>The Extension is not directed at children under 13 and does not knowingly collect any personal information from children.</p>
+
+    <h2>9. Changes to This Policy</h2>
+    <p>If this policy is updated, the revised version will be posted at this URL with an updated effective date. Material changes will be noted in the Extension's update notes on the Chrome Web Store.</p>
+
+    <h2>10. Contact</h2>
+    <p>If you have questions about this privacy policy, please open an issue on the <a href="https://github.com/lankeami/gmail-sender-info/issues">GitHub repository</a>.</p>
+  </main>
+  <footer>
+    <p>&copy; 2026 Gmail Sender Info. <a href="terms-of-service.html">Terms of Service</a> &middot; <a href="support.html">Support</a></p>
+  </footer>
+</body>
+</html>

@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Support — Gmail Sender Info</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; color: #1a1a1a; line-height: 1.7; background: #fafafa; }
+    header { background: #fff; border-bottom: 1px solid #e0e0e0; padding: 1.5rem 2rem; }
+    header a { color: #4285F4; text-decoration: none; font-size: 0.9rem; }
+    header a:hover { text-decoration: underline; }
+    main { max-width: 720px; margin: 2rem auto; padding: 0 1.5rem; }
+    h1 { font-size: 1.8rem; margin-bottom: 0.25rem; }
+    .subtitle { color: #666; font-size: 0.9rem; margin-bottom: 2rem; }
+    h2 { font-size: 1.2rem; margin-top: 2rem; margin-bottom: 0.5rem; color: #333; }
+    h3 { font-size: 1rem; margin-top: 1.25rem; margin-bottom: 0.25rem; color: #444; }
+    p, li { font-size: 0.95rem; margin-bottom: 0.75rem; }
+    ul, ol { padding-left: 1.5rem; }
+    code { background: #f0f0f0; padding: 0.1rem 0.35rem; border-radius: 3px; font-size: 0.85rem; }
+    .faq-item { margin-bottom: 1.5rem; }
+    .faq-q { font-weight: 600; margin-bottom: 0.25rem; }
+    footer { max-width: 720px; margin: 3rem auto 2rem; padding: 0 1.5rem; font-size: 0.8rem; color: #999; border-top: 1px solid #e0e0e0; padding-top: 1rem; }
+    footer a { color: #999; }
+  </style>
+</head>
+<body>
+  <header>
+    <a href="index.html">&larr; Gmail Sender Info</a>
+  </header>
+  <main>
+    <h1>Support</h1>
+    <p class="subtitle">Frequently asked questions and troubleshooting</p>
+
+    <h2>Getting Help</h2>
+    <p>If you encounter a bug or have a feature request, please open an issue on the <a href="https://github.com/lankeami/gmail-sender-info/issues">GitHub repository</a>.</p>
+
+    <h2>Frequently Asked Questions</h2>
+
+    <div class="faq-item">
+      <p class="faq-q">What does this extension do?</p>
+      <p>Gmail Sender Info shows you the sender's domain, brand logo, and email authentication status (SPF, DKIM, DMARC) directly in Gmail. Hover over an inbox row to see a tooltip, or open an email to see a detailed banner with security checks.</p>
+    </div>
+
+    <div class="faq-item">
+      <p class="faq-q">What do the verdicts mean?</p>
+      <ul>
+        <li><strong>Trusted</strong> — SPF, DKIM, and DMARC all passed. The sender's identity is verified. No warning is shown.</li>
+        <li><strong>Use Caution</strong> — One or more checks are missing, neutral, or produced a soft failure. The email may be legitimate but couldn't be fully verified.</li>
+        <li><strong>Not Trusted</strong> — Key checks failed. The sender's identity could not be verified. Treat the email with extra caution.</li>
+      </ul>
+    </div>
+
+    <div class="faq-item">
+      <p class="faq-q">Where does the sender logo come from?</p>
+      <p>The extension first checks for a <strong>BIMI record</strong> — a DNS-based standard that lets domains publish a verified brand logo. If no BIMI record exists, it falls back to Google's favicon service. If no favicon is found either, a yellow warning icon is shown.</p>
+    </div>
+
+    <div class="faq-item">
+      <p class="faq-q">Does the extension read my emails?</p>
+      <p>No. The extension only reads <strong>email headers</strong> (the technical metadata about how the email was delivered) to check SPF, DKIM, and DMARC results. It never accesses the body, attachments, or content of your emails.</p>
+    </div>
+
+    <div class="faq-item">
+      <p class="faq-q">Does the extension send my data anywhere?</p>
+      <p>The extension sends sender domain names to Google's DNS service (for BIMI lookups) and Google's favicon service (for logos). No data is sent to any third-party or non-Google service. See the <a href="privacy-policy.html">Privacy Policy</a> for details.</p>
+    </div>
+
+    <div class="faq-item">
+      <p class="faq-q">Why does an email show "Use Caution" even though it seems legitimate?</p>
+      <p>Some legitimate senders don't have all authentication records configured, or their emails are forwarded through mailing lists that break DKIM signatures. "Use Caution" means the extension couldn't fully verify the sender — it doesn't necessarily mean the email is malicious.</p>
+    </div>
+
+    <div class="faq-item">
+      <p class="faq-q">The extension stopped working after a Gmail update. What should I do?</p>
+      <p>Gmail occasionally changes its web interface, which can affect how the extension detects emails. Try these steps:</p>
+      <ol>
+        <li>Go to <code>chrome://extensions/</code></li>
+        <li>Find Gmail Sender Info and click the refresh icon</li>
+        <li>Reload your Gmail tab</li>
+      </ol>
+      <p>If the issue persists, please <a href="https://github.com/lankeami/gmail-sender-info/issues">report it</a> so it can be fixed.</p>
+    </div>
+
+    <div class="faq-item">
+      <p class="faq-q">Can I clear the extension's cached data?</p>
+      <p>Yes. The extension caches lookup results for 24 hours in Chrome's local storage. To clear it:</p>
+      <ol>
+        <li>Go to <code>chrome://extensions/</code></li>
+        <li>Click "Details" on Gmail Sender Info</li>
+        <li>Click "Clear data" under Storage</li>
+      </ol>
+      <p>The cache also clears automatically whenever the extension is updated.</p>
+    </div>
+
+    <h2>Troubleshooting</h2>
+
+    <h3>Banner or tooltip not appearing</h3>
+    <ul>
+      <li>Make sure the extension is enabled at <code>chrome://extensions/</code></li>
+      <li>Reload the Gmail tab after enabling or updating the extension</li>
+      <li>The extension only works on <code>mail.google.com</code> — it won't appear on Gmail mobile apps or other email clients</li>
+    </ul>
+
+    <h3>Logo shows a yellow warning triangle</h3>
+    <p>This means the sender's domain has no BIMI record and no detectable favicon. The extension defaults to a caution icon. This is normal for smaller senders who haven't set up brand verification.</p>
+
+    <h3>Authentication checks show "none" or "neutral"</h3>
+    <p>This means the sender's domain hasn't published the corresponding DNS records (SPF, DKIM, or DMARC). Many smaller organizations don't configure all three. The extension reports what it finds — missing records result in "none" or "neutral" rather than a failure.</p>
+  </main>
+  <footer>
+    <p>&copy; 2026 Gmail Sender Info. <a href="privacy-policy.html">Privacy Policy</a> &middot; <a href="terms-of-service.html">Terms of Service</a></p>
+  </footer>
+</body>
+</html>
