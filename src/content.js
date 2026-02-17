@@ -671,6 +671,149 @@
     });
   }
 
+  // --- AI Spam/Phishing Analysis ---
+
+  /**
+   * Extract structured email data from the DOM for AI analysis.
+   * Returns { displayName, senderEmail, subject, bodyText, links }.
+   */
+  function extractEmailData(envelopeEmail) {
+    // Display name from .gD element textContent
+    const senderEl = document.querySelector('.gD[email]');
+    const displayName = senderEl ? senderEl.textContent.trim() : '';
+
+    // Subject line
+    const subjectEl = document.querySelector('.hP');
+    const subject = subjectEl ? subjectEl.textContent.trim() : '';
+
+    // Body text (truncated to ~2000 chars to fit token limits)
+    const bodyEl = document.querySelector('.ii .a3s');
+    const bodyText = bodyEl ? bodyEl.innerText.substring(0, 2000) : '';
+
+    // Links in the body
+    const links = [];
+    if (bodyEl) {
+      const anchors = bodyEl.querySelectorAll('a[href]');
+      for (const a of anchors) {
+        if (links.length >= 20) break;
+        const href = a.getAttribute('href');
+        const text = a.textContent.trim();
+        if (href && !href.startsWith('mailto:')) {
+          // Gmail rewrites links through google.com/url?q= — extract actual URL
+          let actualUrl = href;
+          try {
+            const parsed = new URL(href);
+            if (parsed.hostname.includes('google.com') && parsed.pathname === '/url') {
+              actualUrl = parsed.searchParams.get('q') || href;
+            }
+          } catch { /* invalid URL, use as-is */ }
+          links.push({ href: actualUrl, text: text.substring(0, 100) });
+        }
+      }
+    }
+
+    return { displayName, senderEmail: envelopeEmail, subject, bodyText, links };
+  }
+
+  /**
+   * Check if Chrome's Prompt API (Gemini Nano) is available.
+   */
+  function checkAiAvailable() {
+    if (!contextValid) return Promise.resolve(false);
+    return new Promise((resolve) => {
+      try {
+        chrome.runtime.sendMessage({ action: 'checkAiAvailable' }, (resp) => {
+          if (chrome.runtime.lastError || !resp) resolve(false);
+          else resolve(resp.available === true);
+        });
+      } catch {
+        resolve(false);
+      }
+    });
+  }
+
+  /**
+   * Send email data to background for AI analysis.
+   */
+  function requestAiAnalysis(emailData) {
+    if (!contextValid) return Promise.resolve(null);
+    return new Promise((resolve) => {
+      try {
+        chrome.runtime.sendMessage({ action: 'analyzeEmail', data: emailData }, (resp) => {
+          if (chrome.runtime.lastError || !resp || resp.unavailable) resolve(null);
+          else resolve(resp);
+        });
+      } catch {
+        resolve(null);
+      }
+    });
+  }
+
+  // AI verdict config
+  const AI_VERDICTS = {
+    Ok:      { cls: 'gsi-ai-verdict-ok',      label: 'Ok' },
+    Caution: { cls: 'gsi-ai-verdict-caution',  label: 'Caution' },
+    Reject:  { cls: 'gsi-ai-verdict-reject',   label: 'Reject' },
+  };
+
+  /**
+   * Create and populate the AI Analysis section in the accordion.
+   * Returns the container element (initially shows loading state).
+   * Call updateAiSection() when results arrive.
+   */
+  function createAiSection() {
+    const wrap = document.createElement('div');
+    wrap.classList.add('gsi-ai-section');
+
+    const header = document.createElement('div');
+    header.classList.add('gsi-col-header');
+    header.textContent = 'AI Analysis';
+    wrap.appendChild(header);
+
+    const loading = document.createElement('div');
+    loading.classList.add('gsi-ai-loading');
+    loading.textContent = 'Analyzing\u2026';
+    wrap.appendChild(loading);
+
+    return wrap;
+  }
+
+  /**
+   * Update the AI section with analysis results.
+   */
+  function updateAiSection(sectionEl, result) {
+    // Remove loading indicator
+    const loading = sectionEl.querySelector('.gsi-ai-loading');
+    if (loading) loading.remove();
+
+    if (!result) {
+      // API unavailable — remove entire section
+      sectionEl.remove();
+      return;
+    }
+
+    const verdictConfig = AI_VERDICTS[result.verdict] || AI_VERDICTS.Caution;
+
+    // Verdict pill
+    const pill = document.createElement('span');
+    pill.classList.add('gsi-ai-verdict', verdictConfig.cls);
+    pill.textContent = verdictConfig.label;
+    sectionEl.appendChild(pill);
+
+    // Reasons list
+    if (result.reasons && result.reasons.length > 0) {
+      const list = document.createElement('ul');
+      list.classList.add('gsi-ai-reasons');
+      for (const reason of result.reasons) {
+        const li = document.createElement('li');
+        li.classList.add('gsi-ai-reason-item');
+        li.textContent = reason;
+        list.appendChild(li);
+      }
+      sectionEl.appendChild(list);
+    }
+  }
+
   // --- Banner (email view) ---
 
   let currentBannerEmail = null;
@@ -841,6 +984,30 @@
     }
 
     currentBannerEmail = info.fullDomain;
+
+    // AI spam/phishing analysis (async, won't block banner render)
+    (async () => {
+      const aiAvail = await checkAiAvailable();
+      if (!aiAvail) return;
+
+      // Find accordion content to insert into
+      const accordionContent = banner.querySelector('.gsi-accordion-content');
+      if (!accordionContent) return;
+
+      const emailData = extractEmailData(envelopeEmail);
+      const aiSection = createAiSection();
+
+      // Insert before debug section if it exists, otherwise append
+      const debugWrap = accordionContent.querySelector('.gsi-ai-section + div, div[style*="border-top"]');
+      if (debugWrap) {
+        accordionContent.insertBefore(aiSection, debugWrap);
+      } else {
+        accordionContent.appendChild(aiSection);
+      }
+
+      const result = await requestAiAnalysis(emailData);
+      updateAiSection(aiSection, result);
+    })();
 
     // Detect original sender for Google Groups / mailing list emails
     (async () => {

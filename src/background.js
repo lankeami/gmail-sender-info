@@ -210,31 +210,184 @@ chrome.runtime.onInstalled.addListener(() => {
   chrome.storage.local.clear();
 });
 
+// --- AI Spam/Phishing Analysis via Chrome Prompt API ---
+
+const AI_SYSTEM_PROMPT = `You are a cybersecurity expert analyzing email metadata for spam and phishing indicators.
+
+Given the email data below, evaluate these criteria:
+1. SENDER MISMATCH: Does the display name impersonate a known brand/entity but the email address doesn't match? (e.g., display name "Bank of America" but sender is random-user@gmail.com)
+2. URGENCY/THREAT LANGUAGE: Does the subject or body contain urgent threats, scare tactics, or pressure to act immediately? (e.g., "Account Suspended", "Unauthorized Login", "Act Now")
+3. LINK DISCREPANCIES: Do any links point to domains different from the sender's domain? Note: link shorteners (bit.ly, t.co, goo.gl, tinyurl.com, etc.) and subdomained links (e.g., sender.example.com linking to example.com) are generally acceptable and should NOT be flagged.
+
+Respond with ONLY a JSON object, no markdown fences:
+{"verdict":"Ok","reasons":[]}
+
+verdict must be one of:
+- "Ok" — No significant phishing indicators found.
+- "Caution" — Some suspicious signals that warrant user attention.
+- "Reject" — Strong phishing/spam indicators, likely malicious.
+
+reasons is an array of short explanation strings (empty array if Ok with no concerns).`;
+
+let aiSession = null;
+let aiAvailable = null; // null = unchecked, true/false
+
+async function checkAiAvailable() {
+  if (aiAvailable !== null) return aiAvailable;
+  try {
+    if (typeof LanguageModel === 'undefined') {
+      aiAvailable = false;
+      return false;
+    }
+    const status = await LanguageModel.availability();
+    aiAvailable = status !== 'unavailable';
+    return aiAvailable;
+  } catch {
+    aiAvailable = false;
+    return false;
+  }
+}
+
+async function getAiSession() {
+  if (aiSession) return aiSession;
+  try {
+    aiSession = await LanguageModel.create({
+      initialPrompts: [{ role: 'system', content: AI_SYSTEM_PROMPT }],
+    });
+    return aiSession;
+  } catch {
+    aiAvailable = false;
+    return null;
+  }
+}
+
+function buildAiUserPrompt(data) {
+  const lines = [
+    `Display Name: ${data.displayName || '(none)'}`,
+    `Sender Email: ${data.senderEmail}`,
+    `Subject: ${data.subject || '(none)'}`,
+  ];
+  if (data.bodyText) {
+    lines.push(`Body (excerpt):\n${data.bodyText}`);
+  }
+  if (data.links && data.links.length > 0) {
+    lines.push('Links in email:');
+    for (const link of data.links.slice(0, 20)) {
+      lines.push(`  - text: "${link.text}" → href: ${link.href}`);
+    }
+  }
+  return lines.join('\n');
+}
+
+function parseAiResult(text) {
+  try {
+    // Strip markdown fences if model wraps response
+    const cleaned = text.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
+    const obj = JSON.parse(cleaned);
+    const verdict = ['Ok', 'Caution', 'Reject'].includes(obj.verdict) ? obj.verdict : 'Caution';
+    const reasons = Array.isArray(obj.reasons) ? obj.reasons.map(String) : [];
+    return { verdict, reasons };
+  } catch {
+    return { verdict: 'Caution', reasons: ['AI response could not be parsed'] };
+  }
+}
+
+// In-memory cache for AI results keyed by message content hash
+const aiResultCache = new Map();
+
 // --- Message handler ---
 
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
-  if (msg.action !== 'getSenderInfo') return false;
-
-  const email = (msg.email || '').toLowerCase().trim();
-  if (!email || !email.includes('@')) {
-    sendResponse({ error: 'Invalid email' });
-    return false;
-  }
-
-  const domain = email.split('@')[1];
-
-  (async () => {
-    // Check cache first
-    const cached = await getCached(email);
-    if (cached) {
-      sendResponse(cached);
-      return;
+  if (msg.action === 'getSenderInfo') {
+    const email = (msg.email || '').toLowerCase().trim();
+    if (!email || !email.includes('@')) {
+      sendResponse({ error: 'Invalid email' });
+      return false;
     }
 
-    const info = await resolveLogo(domain);
-    await setCache(email, info);
-    sendResponse(info);
-  })();
+    const domain = email.split('@')[1];
 
-  return true; // Keep message channel open for async response
+    (async () => {
+      // Check cache first
+      const cached = await getCached(email);
+      if (cached) {
+        sendResponse(cached);
+        return;
+      }
+
+      const info = await resolveLogo(domain);
+      await setCache(email, info);
+      sendResponse(info);
+    })();
+
+    return true;
+  }
+
+  if (msg.action === 'checkAiAvailable') {
+    checkAiAvailable().then((available) => sendResponse({ available }));
+    return true;
+  }
+
+  if (msg.action === 'analyzeEmail') {
+    const data = msg.data;
+    if (!data || !data.senderEmail) {
+      sendResponse({ error: 'Missing email data' });
+      return false;
+    }
+
+    // Simple cache key from sender + subject
+    const cacheKey = `ai:${data.senderEmail}:${(data.subject || '').substring(0, 80)}`;
+    const cached = aiResultCache.get(cacheKey);
+    if (cached) {
+      sendResponse(cached);
+      return false;
+    }
+
+    (async () => {
+      try {
+        const available = await checkAiAvailable();
+        if (!available) {
+          sendResponse({ unavailable: true });
+          return;
+        }
+
+        const session = await getAiSession();
+        if (!session) {
+          sendResponse({ unavailable: true });
+          return;
+        }
+
+        const clone = await session.clone();
+        const userPrompt = buildAiUserPrompt(data);
+        const response = await clone.prompt(userPrompt);
+        clone.destroy();
+
+        const result = parseAiResult(response);
+        aiResultCache.set(cacheKey, result);
+        sendResponse(result);
+      } catch (e) {
+        // Session may have been garbage collected — reset and retry once
+        if (aiSession) {
+          aiSession = null;
+          try {
+            const session = await getAiSession();
+            if (session) {
+              const clone = await session.clone();
+              const response = await clone.prompt(buildAiUserPrompt(data));
+              clone.destroy();
+              const result = parseAiResult(response);
+              aiResultCache.set(cacheKey, result);
+              sendResponse(result);
+              return;
+            }
+          } catch { /* fall through */ }
+        }
+        sendResponse({ verdict: 'Caution', reasons: ['AI analysis failed'] });
+      }
+    })();
+
+    return true;
+  }
+
+  return false;
 });
