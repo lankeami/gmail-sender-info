@@ -9,7 +9,7 @@ gmail-sender-info/
 ├── manifest.json           # Manifest V3
 ├── src/
 │   ├── content.js          # MutationObserver, tooltip, banner, logo fallback chain
-│   ├── background.js       # Service worker: BIMI DNS lookup, caching
+│   ├── background.js       # Service worker: BIMI DNS lookup, caching, AI analysis
 │   ├── page-fetch.js       # MAIN world: fetches raw headers using Gmail's session
 │   └── styles.css          # Styles for tooltip (#gsi-tooltip) and banner (#gsi-banner)
 ├── images/
@@ -33,6 +33,14 @@ gmail-sender-info/
 **Content → Background:** `{ action: 'getSenderInfo', email: 'user@example.com' }`
 
 **Background → Content:** `{ fullDomain, rootDomain, logoUrl, logoSource, faviconSubUrl, faviconRootUrl }`
+
+**Content → Background:** `{ action: 'checkAiAvailable' }`
+
+**Background → Content:** `{ available: true|false }`
+
+**Content → Background:** `{ action: 'analyzeEmail', data: { displayName, senderEmail, subject, bodyText, links } }`
+
+**Background → Content:** `{ verdict: 'Ok'|'Caution'|'Reject', reasons: [...] }` or `{ unavailable: true }`
 
 ## Logo Resolution Chain
 
@@ -103,6 +111,27 @@ The inline verdict badge (`.gsi-banner-verdict`) in the top row mirrors the acco
 | Dangerous | `.gsi-banner-verdict-dangerous` | 18×18 red circle with X, red background |
 
 **Logo-source override:** If the logo chain falls through to caution.svg (source = unknown), the verdict is capped at caution even if SPF/DKIM/DMARC all pass. This is coordinated via a shared `bannerState` object between the async logo resolution and security check — whichever completes second applies the override.
+
+### AI Analysis Section
+
+Section inside the details accordion (between the details table and the debug section). Uses Chrome's built-in Prompt API (Gemini Nano, Chrome 138+) for on-device spam/phishing scoring.
+
+| Element | Class | Description |
+|---------|-------|-------------|
+| Section wrapper | `.gsi-ai-section` | Container with top border separator |
+| Header | `.gsi-col-header` | "AI Analysis" label |
+| Loading state | `.gsi-ai-loading` | "Analyzing..." italic text |
+| Verdict pill | `.gsi-ai-verdict` | Colored badge: Ok (green), Caution (orange), Reject (red) |
+| Reasons list | `.gsi-ai-reasons` | Bulleted list of AI-identified concerns |
+
+**Verdict classes:** `.gsi-ai-verdict-ok` (green `#1b5e20`), `.gsi-ai-verdict-caution` (orange `#e65100`), `.gsi-ai-verdict-reject` (red `#c62828`).
+
+**Data flow:** On banner insert → check AI availability → extract email data from DOM (display name, subject, body text, links) → send to background → background prompts Gemini Nano → update section with verdict + reasons. If Prompt API is unavailable, the section is silently removed.
+
+**Criteria evaluated:**
+1. Sender display name vs email address mismatch (brand impersonation)
+2. Urgency/threat language in subject and body
+3. Link domain discrepancies (excluding link shorteners and subdomains)
 
 ### Debug Section
 

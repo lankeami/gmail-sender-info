@@ -14,7 +14,8 @@ Chrome extension that displays sender domain information and email authenticatio
   - [1. Logo Resolution Chain](#1-logo-resolution-chain)
   - [2. Email Authentication Checks](#2-email-authentication-checks)
   - [3. Mailing List / Google Groups Resolution](#3-mailing-list--google-groups-resolution)
-  - [4. Verdict Logic](#4-verdict-logic)
+  - [4. AI Spam/Phishing Analysis](#4-ai-spamphishing-analysis)
+  - [5. Verdict Logic](#5-verdict-logic)
 - [Architecture](#architecture)
   - [Message Flow](#message-flow)
 - [Chrome Web Store Assets](#chrome-web-store-assets)
@@ -107,7 +108,30 @@ The security verdict (SPF/DKIM/DMARC) continues to reflect the **delivery path**
 
 For inbox row tooltips, if Gmail displays "via GroupName" text in the row, the tooltip includes a matching "via" indicator.
 
-### 4. Verdict Logic
+### 4. AI Spam/Phishing Analysis
+
+When viewing an email, the extension uses Chrome's built-in [Prompt API](https://developer.chrome.com/docs/ai/prompt-api) (Gemini Nano) to perform on-device AI analysis of the email content. This requires **Chrome 138+** with the Gemini Nano model downloaded locally.
+
+The extension extracts key data points from the email DOM and sends them to the on-device model:
+
+| Signal | What It Checks |
+|--------|---------------|
+| **Sender Mismatch** | Does the display name impersonate a known brand but the email address doesn't match? (e.g., "Bank of America" from `random@gmail.com`) |
+| **Urgency/Threat Language** | Does the subject or body contain urgent threats, scare tactics, or pressure to act immediately? |
+| **Link Discrepancies** | Do links in the email point to domains different from the sender? Link shorteners and subdomains are treated as acceptable. |
+
+The AI returns one of three verdicts:
+- **Ok** -- No significant phishing indicators found.
+- **Caution** -- Some suspicious signals that warrant user attention.
+- **Reject** -- Strong phishing/spam indicators, likely malicious.
+
+The AI verdict is displayed in a separate "AI Analysis" section inside the banner's details accordion, with a colored verdict pill and a list of reasons. It is **advisory only** and does not override the SPF/DKIM/DMARC-based verdict.
+
+**Privacy:** All AI analysis runs entirely on-device using Gemini Nano. No email content is sent to any external server.
+
+**Graceful degradation:** If the Prompt API is unavailable (unsupported browser, model not downloaded, insufficient hardware), the AI section simply doesn't appear. The rest of the extension works normally.
+
+### 5. Verdict Logic
 
 The extension combines the authentication results into a single verdict:
 
@@ -127,7 +151,7 @@ If headers cannot be fetched (timeout, missing message ID, etc.), the verdict de
 gmail-sender-info/
 ├── manifest.json           # Manifest V3 config
 ├── src/
-│   ├── background.js       # Service worker: BIMI DNS, favicon resolution, caching
+│   ├── background.js       # Service worker: BIMI DNS, favicon resolution, caching, AI analysis
 │   ├── content.js          # Isolated world: tooltip, banner, auth header parsing
 │   ├── page-fetch.js       # MAIN world: fetches raw headers using Gmail's session
 │   └── styles.css          # Tooltip, banner, accordion, verdict styles
@@ -163,6 +187,15 @@ gmail-sender-info/
         │◀── auth results ─────────┘
         │
    Render tooltip/banner with logo + verdict
+        │
+   content.js ──sendMessage──▶ background.js (AI analysis)
+        │                          │
+        │                     LanguageModel.create() / clone / prompt
+        │                     (Gemini Nano, on-device, Chrome 138+)
+        │                          │
+        │◀── AI verdict + reasons ─┘
+        │
+   Render AI Analysis section in accordion
 ```
 
 ## Chrome Web Store Assets
