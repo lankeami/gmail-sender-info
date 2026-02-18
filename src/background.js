@@ -286,9 +286,9 @@ function parseAiResult(text) {
     const obj = JSON.parse(cleaned);
     const verdict = ['Ok', 'Caution', 'Reject'].includes(obj.verdict) ? obj.verdict : 'Caution';
     const reasons = Array.isArray(obj.reasons) ? obj.reasons.map(String) : [];
-    return { verdict, reasons };
-  } catch {
-    return { verdict: 'Caution', reasons: ['AI response could not be parsed'] };
+    return { verdict, reasons, parseError: null };
+  } catch (e) {
+    return { verdict: 'Caution', reasons: ['AI response could not be parsed'], parseError: e.message };
   }
 }
 
@@ -339,7 +339,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     const cacheKey = `ai:${data.senderEmail}:${(data.subject || '').substring(0, 80)}`;
     const cached = aiResultCache.get(cacheKey);
     if (cached) {
-      sendResponse(cached);
+      sendResponse({ ...cached, debug: { ...cached.debug, cached: true } });
       return false;
     }
 
@@ -359,12 +359,15 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
 
         const clone = await session.clone();
         const userPrompt = buildAiUserPrompt(data);
-        const response = await clone.prompt(userPrompt);
+        const t0 = Date.now();
+        const rawResponse = await clone.prompt(userPrompt);
+        const durationMs = Date.now() - t0;
         clone.destroy();
 
-        const result = parseAiResult(response);
-        aiResultCache.set(cacheKey, result);
-        sendResponse(result);
+        const result = parseAiResult(rawResponse);
+        const response = { ...result, debug: { rawResponse, userPrompt, durationMs, cached: false } };
+        aiResultCache.set(cacheKey, response);
+        sendResponse(response);
       } catch (e) {
         // Session may have been garbage collected — reset and retry once
         if (aiSession) {
@@ -373,16 +376,20 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
             const session = await getAiSession();
             if (session) {
               const clone = await session.clone();
-              const response = await clone.prompt(buildAiUserPrompt(data));
+              const userPrompt = buildAiUserPrompt(data);
+              const t0 = Date.now();
+              const rawResponse = await clone.prompt(userPrompt);
+              const durationMs = Date.now() - t0;
               clone.destroy();
-              const result = parseAiResult(response);
-              aiResultCache.set(cacheKey, result);
-              sendResponse(result);
+              const result = parseAiResult(rawResponse);
+              const response = { ...result, debug: { rawResponse, userPrompt, durationMs, cached: false, retried: true } };
+              aiResultCache.set(cacheKey, response);
+              sendResponse(response);
               return;
             }
           } catch { /* fall through */ }
         }
-        sendResponse({ verdict: 'Caution', reasons: ['AI analysis failed'] });
+        sendResponse({ verdict: 'Caution', reasons: ['AI analysis failed'], debug: { error: e.message || 'unknown error' } });
       }
     })();
 

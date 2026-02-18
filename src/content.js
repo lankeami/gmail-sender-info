@@ -814,6 +814,57 @@
     }
   }
 
+  /**
+   * Append AI diagnostic lines to the debug section.
+   * If the debug section exists, appends immediately.
+   * Otherwise stores on the banner for the debug builder to pick up.
+   */
+  function appendAiDebugLines(banner, result) {
+    const lines = buildAiDebugLines(result);
+    const debugContent = banner.querySelector('.gsi-debug-content');
+    if (debugContent) {
+      // Debug section already exists — append
+      const existing = debugContent.textContent;
+      debugContent.textContent = existing + (existing ? '\n' : '') + lines.join('\n');
+    } else {
+      // Debug section not built yet — store for later
+      banner.__gsiAiDebug = lines;
+    }
+  }
+
+  /**
+   * Build debug text lines from AI analysis result.
+   */
+  function buildAiDebugLines(result) {
+    const lines = ['--- AI Analysis ---'];
+    const d = result.debug || {};
+    if (d.cached) {
+      lines.push('AI: cache hit');
+    } else if (d.durationMs != null) {
+      lines.push(`AI: ${d.durationMs}ms${d.retried ? ' (retried)' : ''}`);
+    }
+    lines.push(`AI verdict: ${result.verdict || '(none)'}`);
+    if (result.reasons && result.reasons.length > 0) {
+      lines.push(`AI reasons: ${result.reasons.join('; ')}`);
+    }
+    if (d.parseError) {
+      lines.push(`AI parse error: ${d.parseError}`);
+    }
+    if (d.error) {
+      lines.push(`AI error: ${d.error}`);
+    }
+    if (d.rawResponse != null) {
+      // Truncate raw response for display
+      const raw = String(d.rawResponse);
+      lines.push(`AI raw: ${raw.length > 500 ? raw.substring(0, 500) + '…' : raw}`);
+    }
+    if (d.userPrompt != null) {
+      const prompt = String(d.userPrompt);
+      lines.push(`AI prompt (${prompt.length} chars): ${prompt.length > 300 ? prompt.substring(0, 300) + '…' : prompt}`);
+    }
+    return lines;
+  }
+
   // --- Banner (email view) ---
 
   let currentBannerEmail = null;
@@ -1007,6 +1058,11 @@
 
       const result = await requestAiAnalysis(emailData);
       updateAiSection(aiSection, result);
+
+      // Append AI diagnostics to the debug section
+      if (result && result.debug) {
+        appendAiDebugLines(banner, result);
+      }
     })();
 
     // Detect original sender for Google Groups / mailing list emails
@@ -1060,6 +1116,7 @@
       debugHeader.appendChild(debugChevron);
       debugHeader.appendChild(document.createTextNode(' Debug'));
       const debugContent = document.createElement('div');
+      debugContent.classList.add('gsi-debug-content');
       debugContent.style.cssText = 'display:none;font-size:11px;color:#5f6368;margin-top:4px;padding:4px 8px;background:#fff3cd;border-radius:4px;font-family:monospace;word-break:break-all;white-space:pre-wrap';
       // Build debug lines
       const debugLines = [
@@ -1102,6 +1159,12 @@
         }
       }
       debugLines.push(`BIMI: ${info.logoSource === 'bimi' ? 'pass (DNS)' : 'none'}`);
+
+      // Include AI diagnostics if the AI block finished before the debug section was built
+      if (banner.__gsiAiDebug) {
+        debugLines.push(...banner.__gsiAiDebug);
+        delete banner.__gsiAiDebug;
+      }
 
       debugContent.textContent = debugLines.join('\n');
       debugHeader.addEventListener('click', () => {
