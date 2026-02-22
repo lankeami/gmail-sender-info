@@ -1215,6 +1215,27 @@
         }
       }
 
+      // Use X-Original-Sender for AI scoring when it points to a different domain
+      if (msgResult) {
+        const headerResult = await fetchEmailHeaders(msgResult.id);
+        if (!headerResult.error) {
+          let origSender = null;
+          if (headerResult.authData?.originalSender) {
+            origSender = headerResult.authData.originalSender;
+          } else if (headerResult.headers) {
+            const ml = parseMailingListHeaders(headerResult.headers);
+            if (ml) origSender = ml.originalSender;
+          }
+          if (origSender && origSender !== envelopeEmail) {
+            const origDomain = origSender.split('@')[1];
+            const envDomain = envelopeEmail.split('@')[1];
+            if (origDomain && origDomain !== envDomain) {
+              emailData.senderEmail = origSender;
+            }
+          }
+        }
+      }
+
       function applyResult(result) {
         // Reset gemini icon classes
         geminiIcon.classList.remove('gsi-gemini-ok', 'gsi-gemini-caution', 'gsi-gemini-reject', 'gsi-gemini-neutral');
