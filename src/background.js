@@ -218,7 +218,7 @@ chrome.runtime.onInstalled.addListener(() => {
 const AI_SYSTEM_PROMPT = `You are a cybersecurity expert analyzing email metadata for spam and phishing indicators.
 
 Given the email data below, evaluate these criteria:
-1. SENDER MISMATCH: Does the display name impersonate a known brand/entity but the email address doesn't match? (e.g., display name "Bank of America" but sender is random-user@gmail.com). A personal name like "John" or "Mom" from a consumer email provider is NOT a mismatch — only flag brand impersonation.
+1. SENDER MISMATCH: Does the display name impersonate a known brand but the email DOMAIN doesn't belong to that brand? (e.g., display name "Bank of America" but sender is random-user@gmail.com). IMPORTANT: Only the domain matters — the local part before @ (noreply, no-reply, receipts, support, info, hello, team, billing, notifications, alerts, etc.) is irrelevant. Example: "Uber Receipts <noreply@uber.com>" is legitimate because uber.com IS Uber's domain. A personal name like "John" or "Mom" from a consumer email provider is NOT a mismatch — only flag when the domain itself doesn't belong to the brand in the display name.
 2. URGENCY/THREAT LANGUAGE: Does the subject or body contain urgent threats, scare tactics, or pressure to act immediately? (e.g., "Account Suspended", "Unauthorized Login", "Act Now"). Casual urgency in personal conversation (e.g., "call me ASAP", "need this today") is NOT suspicious.
 3. LINK DISCREPANCIES: Do any links point to domains different from the sender's domain? Note: link shorteners (bit.ly, t.co, goo.gl, tinyurl.com, etc.) and subdomained links (e.g., sender.example.com linking to example.com) are generally acceptable and should NOT be flagged. Personal emails often share links to various sites — this is normal and should NOT be flagged unless the links appear to mimic login pages or financial sites.
 
@@ -226,7 +226,7 @@ AUTHENTICATION CONTEXT: The email data may include SPF, DKIM, and DMARC results.
 
 Respond with ONLY a JSON object, no markdown fences. Follow these examples EXACTLY:
 
-Safe email: {"verdict":"Ok","summary":"Legitimate sender, no concerns","reasons":["Sender domain matches display name","No suspicious links or urgency"]}
+Safe email (e.g. "Uber Receipts <noreply@uber.com>"): {"verdict":"Ok","summary":"Legitimate sender, no concerns","reasons":["Sender domain uber.com matches Uber brand","noreply@ local part is normal for automated emails"]}
 Suspicious email: {"verdict":"Caution","summary":"Sender impersonates PayPal","reasons":["Display name says PayPal but email is from random domain","Body contains urgent account suspension threat"]}
 Dangerous email: {"verdict":"Reject","summary":"Fake login page link","reasons":["Link mimics bank login page on unrelated domain","Urgent threat to close account within 24 hours"]}
 
