@@ -56,6 +56,22 @@
   border-radius: 6px;
 }
 
+#gsi-banner .gsi-profile-img {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+  border: 1.5px solid #e8eaed;
+  vertical-align: middle;
+}
+
+.gsi-profile-name {
+  font-size: 14px;
+  color: #5f6368;
+  font-weight: 500;
+}
+
 .gsi-banner-top {
   display: flex;
   align-items: center;
@@ -92,7 +108,7 @@
 
 .gsi-banner-text {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 8px;
   flex-wrap: wrap;
 }
