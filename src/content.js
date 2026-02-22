@@ -715,39 +715,64 @@
     return { displayName, senderEmail: envelopeEmail, subject, bodyText, links };
   }
 
+  const AI_MIN_CHROME_VERSION = 138;
+
+  function getChromeVersion() {
+    const match = navigator.userAgent.match(/Chrome\/(\d+)/);
+    return match ? parseInt(match[1], 10) : null;
+  }
+
   /**
    * Check if Chrome's Prompt API (Gemini Nano) is available.
+   * Returns { available, hasApi, status, chromeVersion } for diagnostics.
    */
   function checkAiAvailable() {
-    if (!contextValid) return Promise.resolve(false);
+    if (!contextValid) return Promise.resolve({ available: false });
     return new Promise((resolve) => {
       try {
         chrome.runtime.sendMessage({ action: 'checkAiAvailable' }, (resp) => {
-          if (chrome.runtime.lastError || !resp) resolve(false);
-          else resolve(resp.available === true);
+          if (chrome.runtime.lastError || !resp) resolve({ available: false });
+          else resolve({ ...resp, chromeVersion: getChromeVersion() });
         });
       } catch {
-        resolve(false);
+        resolve({ available: false });
       }
     });
   }
 
   /**
    * Send email data to background for AI analysis.
+   * Resolves with result, { timeout: true }, or null.
    */
-  function requestAiAnalysis(emailData) {
+  function requestAiAnalysis(emailData, { skipCache = false } = {}) {
     if (!contextValid) return Promise.resolve(null);
     return new Promise((resolve) => {
+      let settled = false;
+      const timer = setTimeout(() => {
+        if (!settled) { settled = true; resolve({ timeout: true }); }
+      }, 30000);
       try {
-        chrome.runtime.sendMessage({ action: 'analyzeEmail', data: emailData }, (resp) => {
+        chrome.runtime.sendMessage({ action: 'analyzeEmail', data: emailData, skipCache }, (resp) => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
           if (chrome.runtime.lastError || !resp || resp.unavailable) resolve(null);
           else resolve(resp);
         });
       } catch {
-        resolve(null);
+        if (!settled) { settled = true; clearTimeout(timer); resolve(null); }
       }
     });
   }
+
+  const AI_SCAN_MESSAGES = [
+    'Scanning email\u2026',
+    'Checking sender identity\u2026',
+    'Analyzing links\u2026',
+    'Reviewing content\u2026',
+    'Evaluating threat signals\u2026',
+    'Almost done\u2026',
+  ];
 
   // AI verdict config
   const AI_VERDICTS = {
@@ -761,7 +786,7 @@
    * Returns the container element (initially shows loading state).
    * Call updateAiSection() when results arrive.
    */
-  function createAiSection() {
+  function createAiSection(aiStatus) {
     const wrap = document.createElement('div');
     wrap.classList.add('gsi-ai-section');
 
@@ -770,9 +795,25 @@
     header.textContent = 'AI Analysis';
     wrap.appendChild(header);
 
+    // Always show version + API status so the user has context
+    if (aiStatus) {
+      const compat = document.createElement('div');
+      compat.classList.add('gsi-ai-compat');
+
+      const chromeVer = aiStatus.chromeVersion;
+      const meetsMin = chromeVer && chromeVer >= AI_MIN_CHROME_VERSION;
+      const apiLabel = !aiStatus.hasApi ? 'not found' : (aiStatus.status || 'unknown');
+
+      compat.textContent = `Chrome ${chromeVer || '?'}`
+        + (meetsMin ? '' : ` (requires ${AI_MIN_CHROME_VERSION}+)`)
+        + ` · Prompt API: ${apiLabel}`;
+      compat.style.color = aiStatus.available ? '#5f6368' : '#c62828';
+      wrap.appendChild(compat);
+    }
+
     const loading = document.createElement('div');
     loading.classList.add('gsi-ai-loading');
-    loading.textContent = 'Analyzing\u2026';
+    loading.textContent = aiStatus && aiStatus.available ? 'Analyzing\u2026' : '';
     wrap.appendChild(loading);
 
     return wrap;
@@ -781,26 +822,85 @@
   /**
    * Update the AI section with analysis results.
    */
-  function updateAiSection(sectionEl, result) {
+  function updateAiSection(sectionEl, result, bannerEl, onRetry) {
     // Remove loading indicator
     const loading = sectionEl.querySelector('.gsi-ai-loading');
     if (loading) loading.remove();
 
-    if (!result) {
-      // API unavailable — remove entire section
-      sectionEl.remove();
-      return;
+    // Remove any previous banner row from a prior attempt
+    if (bannerEl) {
+      const oldRow = bannerEl.querySelector('.gsi-ai-banner-row');
+      if (oldRow) oldRow.remove();
     }
 
+    const failed = !result || result.timeout || result.parseError;
+
+    // Banner row: verdict pill + summary, or apology message on failure
+    if (bannerEl) {
+      const accordion = bannerEl.querySelector('.gsi-accordion');
+
+      const row = document.createElement('div');
+      row.classList.add('gsi-ai-banner-row');
+
+      if (failed) {
+        const msg = document.createElement('span');
+        msg.classList.add('gsi-ai-summary', 'gsi-ai-fail-text');
+        msg.textContent = result && result.timeout
+          ? 'AI analysis timed out. Sorry about that.'
+          : 'AI analysis was inconclusive. Sorry about that.';
+        row.appendChild(msg);
+      } else {
+        const verdictConfig = AI_VERDICTS[result.verdict] || AI_VERDICTS.Caution;
+
+        const pill = document.createElement('span');
+        pill.classList.add('gsi-ai-verdict', verdictConfig.cls);
+        pill.textContent = verdictConfig.label;
+        row.appendChild(pill);
+
+        if (result.summary) {
+          const summaryEl = document.createElement('span');
+          summaryEl.classList.add('gsi-ai-summary');
+          summaryEl.textContent = result.summary;
+          row.appendChild(summaryEl);
+        }
+      }
+
+      if (onRetry) {
+        const refreshBtn = document.createElement('button');
+        refreshBtn.classList.add('gsi-ai-refresh-btn');
+        refreshBtn.title = 'Re-run AI analysis';
+        refreshBtn.textContent = '\u21BB';
+        refreshBtn.addEventListener('click', () => {
+          row.remove();
+          const oldReasons = sectionEl.querySelector('.gsi-ai-reasons');
+          if (oldReasons) oldReasons.remove();
+          const oldPill = sectionEl.querySelector('.gsi-ai-verdict');
+          if (oldPill) oldPill.remove();
+          const retryLoading = document.createElement('div');
+          retryLoading.classList.add('gsi-ai-loading');
+          retryLoading.textContent = 'Retrying\u2026';
+          sectionEl.appendChild(retryLoading);
+          onRetry();
+        });
+        row.appendChild(refreshBtn);
+      }
+
+      if (accordion) {
+        bannerEl.insertBefore(row, accordion);
+      } else {
+        bannerEl.appendChild(row);
+      }
+    }
+
+    if (failed) return;
+
+    // Accordion: verdict pill copy + full reasons list
     const verdictConfig = AI_VERDICTS[result.verdict] || AI_VERDICTS.Caution;
+    const accordionPill = document.createElement('span');
+    accordionPill.classList.add('gsi-ai-verdict', verdictConfig.cls);
+    accordionPill.textContent = verdictConfig.label;
+    sectionEl.appendChild(accordionPill);
 
-    // Verdict pill
-    const pill = document.createElement('span');
-    pill.classList.add('gsi-ai-verdict', verdictConfig.cls);
-    pill.textContent = verdictConfig.label;
-    sectionEl.appendChild(pill);
-
-    // Reasons list
     if (result.reasons && result.reasons.length > 0) {
       const list = document.createElement('ul');
       list.classList.add('gsi-ai-reasons');
@@ -933,6 +1033,25 @@
 
     textWrap.appendChild(sourceBadge);
     topRow.appendChild(textWrap);
+
+    // Gemini AI indicator (top-right, shown once Prompt API is confirmed available)
+    const geminiIcon = document.createElement('span');
+    geminiIcon.classList.add('gsi-gemini-icon');
+    geminiIcon.style.display = 'none';
+    geminiIcon.title = 'AI analysis by Gemini Nano';
+    const svgNS = 'http://www.w3.org/2000/svg';
+    const svg = document.createElementNS(svgNS, 'svg');
+    svg.setAttribute('width', '20');
+    svg.setAttribute('height', '20');
+    svg.setAttribute('viewBox', '0 0 28 28');
+    svg.setAttribute('fill', 'none');
+    const path = document.createElementNS(svgNS, 'path');
+    path.setAttribute('d', 'M14 0C14 7.732 20.268 14 28 14C20.268 14 14 20.268 14 28C14 20.268 7.732 14 0 14C7.732 14 14 7.732 14 0Z');
+    path.setAttribute('fill', 'currentColor');
+    svg.appendChild(path);
+    geminiIcon.appendChild(svg);
+    topRow.appendChild(geminiIcon);
+
     banner.appendChild(topRow);
 
     // --- Accordion: favicon details ---
@@ -1038,15 +1157,38 @@
 
     // AI spam/phishing analysis (async, won't block banner render)
     (async () => {
-      const aiAvail = await checkAiAvailable();
-      if (!aiAvail) return;
+      const aiStatus = await checkAiAvailable();
+
+      if (!aiStatus.available) return;
+
+      // Show Gemini icon in gray while loading
+      geminiIcon.style.display = '';
+
+      // Cycling scan status text below the domain, where the verdict row will appear
+      const scanText = document.createElement('div');
+      scanText.classList.add('gsi-ai-scan-text');
+      scanText.textContent = AI_SCAN_MESSAGES[0];
+      const accordion = banner.querySelector('.gsi-accordion');
+      if (accordion) {
+        banner.insertBefore(scanText, accordion);
+      } else {
+        banner.appendChild(scanText);
+      }
+      let scanIdx = 0;
+      const scanInterval = setInterval(() => {
+        scanIdx = (scanIdx + 1) % AI_SCAN_MESSAGES.length;
+        scanText.textContent = AI_SCAN_MESSAGES[scanIdx];
+      }, 2500);
 
       // Find accordion content to insert into
       const accordionContent = banner.querySelector('.gsi-accordion-content');
-      if (!accordionContent) return;
+      if (!accordionContent) {
+        clearInterval(scanInterval);
+        scanText.remove();
+        return;
+      }
 
-      const emailData = extractEmailData(envelopeEmail);
-      const aiSection = createAiSection();
+      const aiSection = createAiSection(aiStatus);
 
       // Insert before debug section if it exists, otherwise append
       const debugWrap = accordionContent.querySelector('.gsi-ai-section + div, div[style*="border-top"]');
@@ -1056,13 +1198,48 @@
         accordionContent.appendChild(aiSection);
       }
 
-      const result = await requestAiAnalysis(emailData);
-      updateAiSection(aiSection, result);
-
-      // Append AI diagnostics to the debug section
-      if (result && result.debug) {
-        appendAiDebugLines(banner, result);
+      const emailData = extractEmailData(envelopeEmail);
+      const msgResult = getMessageId();
+      if (msgResult) {
+        emailData.messageId = msgResult.id;
+        const cached = securityCache.get(msgResult.id);
+        if (cached) {
+          emailData.auth = { spf: cached.spf, dkim: cached.dkim, dmarc: cached.dmarc };
+        }
       }
+
+      function applyResult(result) {
+        // Reset gemini icon classes
+        geminiIcon.classList.remove('gsi-gemini-ok', 'gsi-gemini-caution', 'gsi-gemini-reject', 'gsi-gemini-neutral');
+
+        if (result && result.parseError) {
+          geminiIcon.classList.add('gsi-gemini-neutral');
+        } else if (result && result.verdict) {
+          const colorMap = { Ok: 'gsi-gemini-ok', Caution: 'gsi-gemini-caution', Reject: 'gsi-gemini-reject' };
+          geminiIcon.classList.add(colorMap[result.verdict] || 'gsi-gemini-caution');
+        } else if (result && result.timeout) {
+          geminiIcon.classList.add('gsi-gemini-neutral');
+        } else {
+          geminiIcon.classList.add('gsi-gemini-neutral');
+        }
+
+        if (result && result.debug) {
+          appendAiDebugLines(banner, result);
+        }
+      }
+
+      function handleRetry() {
+        requestAiAnalysis(emailData, { skipCache: true }).then((retryResult) => {
+          updateAiSection(aiSection, retryResult, banner, handleRetry);
+          applyResult(retryResult);
+        });
+      }
+
+      const result = await requestAiAnalysis(emailData);
+      clearInterval(scanInterval);
+      scanText.remove();
+      updateAiSection(aiSection, result, banner, handleRetry);
+      applyResult(result);
     })();
 
     // Detect original sender for Google Groups / mailing list emails

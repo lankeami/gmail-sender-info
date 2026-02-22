@@ -62,6 +62,34 @@
   gap: 14px;
 }
 
+/* Gemini AI sparkle icon (top-right of banner) */
+.gsi-gemini-icon {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: #e8eaed;
+  color: #9aa0a6;
+  flex-shrink: 0;
+  transition: color 0.3s ease, background 0.3s ease;
+}
+
+.gsi-ai-scan-text {
+  margin-top: 8px;
+  font-size: 12px;
+  color: #9aa0a6;
+  font-style: italic;
+  white-space: nowrap;
+}
+
+.gsi-gemini-ok { color: #2e7d32; background: #e8f5e9; }
+.gsi-gemini-caution { color: #e65100; background: #fff3e0; }
+.gsi-gemini-reject { color: #c62828; background: #ffebee; }
+.gsi-gemini-neutral { color: #3c4043; background: transparent; }
+
 .gsi-banner-text {
   display: flex;
   align-items: baseline;
@@ -374,6 +402,46 @@
   padding: 2px 0;
 }
 
+.gsi-ai-fail-text {
+  font-style: italic;
+  color: #9aa0a6;
+}
+
+.gsi-ai-refresh-btn {
+  padding: 0;
+  width: 20px;
+  height: 20px;
+  font-size: 14px;
+  line-height: 20px;
+  text-align: center;
+  color: #9aa0a6;
+  background: none;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.gsi-ai-refresh-btn:hover {
+  background: #e8eaed;
+  color: #3c4043;
+}
+
+.gsi-ai-banner-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.gsi-ai-summary {
+  font-size: 12px;
+  color: #5f6368;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .gsi-ai-verdict {
   display: inline-block;
   padding: 2px 10px;
@@ -400,16 +468,22 @@
 }
 
 .gsi-ai-reasons {
-  margin: 6px 0 0 0;
-  padding: 0 0 0 16px;
+  margin: 8px 0 0 0;
+  padding: 0 0 0 20px;
   list-style: disc;
 }
 
 .gsi-ai-reason-item {
-  font-size: 11px;
+  font-size: 12px;
   color: #3d2800;
-  padding: 1px 0;
+  padding: 2px 0;
   white-space: normal;
+}
+
+.gsi-ai-compat {
+  font-size: 11px;
+  padding: 2px 0;
+  line-height: 1.5;
 }
 
 /* Via badge — mailing list / Google Groups indicator */
