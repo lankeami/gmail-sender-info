@@ -208,33 +208,287 @@ async function setCache(email, data) {
 
 chrome.runtime.onInstalled.addListener(() => {
   chrome.storage.local.clear();
+  aiSession = null;
+  aiAvailable = null;
+  aiResultCache.clear();
 });
+
+// --- AI Spam/Phishing Analysis via Chrome Prompt API ---
+
+const AI_SYSTEM_PROMPT = `You are a cybersecurity expert analyzing email metadata for spam and phishing indicators.
+
+Given the email data below, evaluate these criteria:
+1. SENDER MISMATCH: Does the display name impersonate a known brand but the email DOMAIN doesn't belong to that brand? (e.g., display name "Bank of America" but sender is random-user@gmail.com). IMPORTANT: Only the domain matters — the local part before @ (noreply, no-reply, receipts, support, info, hello, team, billing, notifications, alerts, etc.) is irrelevant. Example: "Uber Receipts <noreply@uber.com>" is legitimate because uber.com IS Uber's domain. A personal name like "John" or "Mom" from a consumer email provider is NOT a mismatch — only flag when the domain itself doesn't belong to the brand in the display name.
+2. URGENCY/THREAT LANGUAGE: Does the subject or body contain urgent threats, scare tactics, or pressure to act immediately? (e.g., "Account Suspended", "Unauthorized Login", "Act Now"). Casual urgency in personal conversation (e.g., "call me ASAP", "need this today") is NOT suspicious.
+3. LINK DISCREPANCIES: Do any links point to domains different from the sender's domain? Note: link shorteners (bit.ly, t.co, goo.gl, tinyurl.com, etc.) and subdomained links (e.g., sender.example.com linking to example.com) are generally acceptable and should NOT be flagged. Personal emails often share links to various sites — this is normal and should NOT be flagged unless the links appear to mimic login pages or financial sites.
+
+AUTHENTICATION CONTEXT: The email data may include SPF, DKIM, and DMARC results. When all three pass, the sender is cryptographically verified — strongly favor "Ok" unless there are clear phishing indicators. Authenticated personal correspondence should almost always be "Ok".
+
+Respond with ONLY a JSON object, no markdown fences. Follow these examples EXACTLY:
+
+Safe email (e.g. "Uber Receipts <noreply@uber.com>"): {"verdict":"Ok","summary":"Legitimate sender, no concerns","reasons":["Sender domain uber.com matches Uber brand","noreply@ local part is normal for automated emails"]}
+Suspicious email: {"verdict":"Caution","summary":"Sender impersonates PayPal","reasons":["Display name says PayPal but email is from random domain","Body contains urgent account suspension threat"]}
+Dangerous email: {"verdict":"Reject","summary":"Fake login page link","reasons":["Link mimics bank login page on unrelated domain","Urgent threat to close account within 24 hours"]}
+
+Rules:
+- verdict: "Ok", "Caution", or "Reject"
+- summary: ALWAYS provide a short phrase under 8 words explaining the assessment
+- reasons: ALWAYS provide 1-3 strings explaining your reasoning. Each reason must be a complete, readable sentence fragment.`;
+
+let aiSession = null;
+let aiSessionPromise = null; // deduplicates concurrent create() calls
+let aiAvailable = null; // null = unchecked, true/false
+let aiAvailableCheckedAt = 0;
+const AI_AVAILABLE_RECHECK_MS = 60000; // re-check availability every 60s if false
+
+async function checkAiAvailable() {
+  // Re-check if previously false and TTL expired (model may have finished downloading)
+  if (aiAvailable === false && Date.now() - aiAvailableCheckedAt > AI_AVAILABLE_RECHECK_MS) {
+    aiAvailable = null;
+  }
+  if (aiAvailable !== null) return aiAvailable;
+  try {
+    if (typeof LanguageModel === 'undefined') {
+      aiAvailable = false;
+      aiAvailableCheckedAt = Date.now();
+      return false;
+    }
+    const status = await LanguageModel.availability();
+    aiAvailable = status !== 'unavailable';
+    aiAvailableCheckedAt = Date.now();
+    return aiAvailable;
+  } catch {
+    aiAvailable = false;
+    aiAvailableCheckedAt = Date.now();
+    return false;
+  }
+}
+
+async function getAiSession() {
+  if (aiSession) return aiSession;
+  // Deduplicate concurrent calls — return the same in-flight promise
+  if (aiSessionPromise) return aiSessionPromise;
+  aiSessionPromise = (async () => {
+    try {
+      aiSession = await LanguageModel.create({
+        initialPrompts: [{ role: 'system', content: AI_SYSTEM_PROMPT }],
+      });
+      return aiSession;
+    } catch {
+      aiAvailable = false;
+      return null;
+    } finally {
+      aiSessionPromise = null;
+    }
+  })();
+  return aiSessionPromise;
+}
+
+/**
+ * Sanitize untrusted email content before inserting into the AI prompt.
+ * Defends against prompt injection by:
+ * 1. Stripping role/instruction markers that could hijack the LLM context
+ * 2. Collapsing whitespace tricks used to hide injected instructions
+ * 3. Truncating to a safe length to limit attack surface
+ */
+function sanitizeForPrompt(text, maxLength = 2000) {
+  if (!text || typeof text !== 'string') return '';
+  let s = text;
+  // Strip characters that could be used to mimic structured prompt boundaries
+  s = s.replace(/[{}[\]]/g, '');
+  // Remove patterns that attempt to impersonate system/assistant roles or inject instructions
+  s = s.replace(/\b(system|assistant|user)\s*:/gi, '$1 -');
+  s = s.replace(/(ignore|disregard|forget|override)\s+(all\s+)?(previous|prior|above|earlier)\s+(instructions?|prompts?|rules?|context)/gi, '[removed]');
+  s = s.replace(/(new\s+instruction|you\s+are\s+now|respond\s+with|always\s+(say|reply|answer|respond))\b/gi, '[removed]');
+  // Collapse excessive whitespace/newlines (used to push injections out of visible context)
+  s = s.replace(/\n{3,}/g, '\n\n');
+  s = s.replace(/[ \t]{4,}/g, '   ');
+  // Truncate
+  if (s.length > maxLength) s = s.slice(0, maxLength) + '…[truncated]';
+  return s;
+}
+
+function buildAiUserPrompt(data) {
+  const lines = [
+    `Display Name: ${sanitizeForPrompt(data.displayName, 200) || '(none)'}`,
+    `Sender Email: ${sanitizeForPrompt(data.senderEmail, 320)}`,
+    `Subject: ${sanitizeForPrompt(data.subject, 500) || '(none)'}`,
+  ];
+  if (data.bodyText) {
+    lines.push(`Body (excerpt):\n${sanitizeForPrompt(data.bodyText, 2000)}`);
+  }
+  if (data.auth) {
+    lines.push(`Authentication: SPF=${data.auth.spf || 'unknown'}, DKIM=${data.auth.dkim || 'unknown'}, DMARC=${data.auth.dmarc || 'unknown'}`);
+  }
+  if (data.links && data.links.length > 0) {
+    lines.push('Links in email:');
+    for (const link of data.links.slice(0, 20)) {
+      const text = sanitizeForPrompt(link.text, 200);
+      const href = sanitizeForPrompt(link.href, 500);
+      lines.push(`  - text: "${text}" → href: ${href}`);
+    }
+  }
+  return lines.join('\n');
+}
+
+function normalizeVerdict(v) {
+  if (!v || typeof v !== 'string') return null;
+  const lower = v.trim().toLowerCase();
+  if (lower === 'ok' || lower === 'safe') return 'Ok';
+  if (lower === 'caution' || lower === 'warning' || lower === 'suspicious') return 'Caution';
+  if (lower === 'reject' || lower === 'danger' || lower === 'dangerous' || lower === 'phishing') return 'Reject';
+  return null;
+}
+
+function parseAiResult(text) {
+  // Strip markdown fences if model wraps response
+  const cleaned = text.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim();
+
+  // Try full JSON parse first
+  try {
+    const obj = JSON.parse(cleaned);
+    const verdict = normalizeVerdict(obj.verdict) || 'Caution';
+    const summary = typeof obj.summary === 'string' ? obj.summary : '';
+    const reasons = Array.isArray(obj.reasons) ? obj.reasons.map(String).filter(r => r && r !== 'undefined') : [];
+    return { verdict, summary, reasons, parseError: null };
+  } catch { /* fall through to recovery */ }
+
+  // Recover from truncated/malformed JSON via regex extraction
+  const verdictMatch = cleaned.match(/"verdict"\s*:\s*"([^"]+)"/i);
+  const verdict = verdictMatch ? normalizeVerdict(verdictMatch[1]) : null;
+
+  const summaryMatch = cleaned.match(/"summary"\s*:\s*"((?:[^"\\]|\\.)*)"/);
+  const summary = summaryMatch ? summaryMatch[1] : '';
+
+  const reasons = [];
+  const reasonsBlock = cleaned.match(/"reasons"\s*:\s*\[([\s\S]*?)(?:\]|$)/);
+  if (reasonsBlock) {
+    const stringMatches = reasonsBlock[1].matchAll(/"((?:[^"\\]|\\.)*)"/g);
+    for (const m of stringMatches) {
+      reasons.push(m[1]);
+    }
+  }
+
+  if (verdict) {
+    return { verdict, summary, reasons, parseError: null };
+  }
+
+  // Last resort: no verdict found at all
+  return { verdict: null, summary: '', reasons: [], parseError: 'no verdict found: ' + cleaned.substring(0, 200) };
+}
+
+// In-memory cache for AI results keyed by message content hash
+const aiResultCache = new Map();
 
 // --- Message handler ---
 
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
-  if (msg.action !== 'getSenderInfo') return false;
-
-  const email = (msg.email || '').toLowerCase().trim();
-  if (!email || !email.includes('@')) {
-    sendResponse({ error: 'Invalid email' });
-    return false;
-  }
-
-  const domain = email.split('@')[1];
-
-  (async () => {
-    // Check cache first
-    const cached = await getCached(email);
-    if (cached) {
-      sendResponse(cached);
-      return;
+  if (msg.action === 'getSenderInfo') {
+    const email = (msg.email || '').toLowerCase().trim();
+    if (!email || !email.includes('@')) {
+      sendResponse({ error: 'Invalid email' });
+      return false;
     }
 
-    const info = await resolveLogo(domain);
-    await setCache(email, info);
-    sendResponse(info);
-  })();
+    const domain = email.split('@')[1];
 
-  return true; // Keep message channel open for async response
+    (async () => {
+      // Check cache first
+      const cached = await getCached(email);
+      if (cached) {
+        sendResponse(cached);
+        return;
+      }
+
+      const info = await resolveLogo(domain);
+      await setCache(email, info);
+      sendResponse(info);
+    })();
+
+    return true;
+  }
+
+  if (msg.action === 'checkAiAvailable') {
+    (async () => {
+      const hasApi = typeof LanguageModel !== 'undefined';
+      let status = null;
+      if (hasApi) {
+        try { status = await LanguageModel.availability(); } catch { /* ignore */ }
+      }
+      const available = hasApi && status !== 'unavailable' && status !== null;
+      sendResponse({ available, hasApi, status });
+    })();
+    return true;
+  }
+
+  if (msg.action === 'analyzeEmail') {
+    const data = msg.data;
+    if (!data || !data.senderEmail) {
+      sendResponse({ error: 'Missing email data' });
+      return false;
+    }
+
+    const cacheKey = data.messageId
+      ? `ai:${data.messageId}`
+      : `ai:${data.senderEmail}:${(data.subject || '').substring(0, 80)}`;
+    if (msg.skipCache) aiResultCache.delete(cacheKey);
+    const cached = aiResultCache.get(cacheKey);
+    if (cached) {
+      sendResponse({ ...cached, debug: { ...cached.debug, cached: true } });
+      return false;
+    }
+
+    (async () => {
+      async function runPrompt(session, retried) {
+        const clone = await session.clone();
+        try {
+          const userPrompt = buildAiUserPrompt(data);
+          const t0 = Date.now();
+          const rawResponse = await clone.prompt(userPrompt);
+          const durationMs = Date.now() - t0;
+          const result = parseAiResult(rawResponse);
+          const response = { ...result, debug: { rawResponse, userPrompt, durationMs, cached: false, retried } };
+          aiResultCache.set(cacheKey, response);
+          return response;
+        } finally {
+          clone.destroy();
+        }
+      }
+
+      try {
+        const available = await checkAiAvailable();
+        if (!available) {
+          sendResponse({ unavailable: true });
+          return;
+        }
+
+        const session = await getAiSession();
+        if (!session) {
+          sendResponse({ unavailable: true });
+          return;
+        }
+
+        const response = await runPrompt(session, false);
+        sendResponse(response);
+      } catch (e) {
+        // Session may have been garbage collected — reset and retry once
+        if (aiSession) {
+          aiSession = null;
+          try {
+            const session = await getAiSession();
+            if (session) {
+              const response = await runPrompt(session, true);
+              sendResponse(response);
+              return;
+            }
+          } catch { /* fall through */ }
+        }
+        sendResponse({ verdict: null, summary: '', reasons: [], parseError: e.message || 'unknown error', debug: { error: e.message || 'unknown error' } });
+      }
+    })();
+
+    return true;
+  }
+
+  return false;
 });
