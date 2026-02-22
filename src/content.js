@@ -996,7 +996,7 @@
 
     // Strategy 1: Find the avatar mask <img> with data-hovercard-id matching the sender.
     // Must target img.ajn specifically — other elements like .yP spans also carry this attribute.
-    const hovercardEl = document.querySelector(`img.ajn[data-hovercard-id="${envelopeEmail}"]`);
+    const hovercardEl = document.querySelector(`img.ajn[data-hovercard-id="${CSS.escape(envelopeEmail)}"]`);
     if (hovercardEl) {
       debug.dataName = hovercardEl.getAttribute('data-name') || null;
       debug.hovercardFound = true;
@@ -1019,7 +1019,7 @@
     }
 
     // Strategy 2: Broader search — find any img near .gD[email] with googleusercontent src
-    const senderEl = document.querySelector(`.gD[email="${envelopeEmail}"]`) || document.querySelector('.gD[email]');
+    const senderEl = document.querySelector(`.gD[email="${CSS.escape(envelopeEmail)}"]`) || document.querySelector('.gD[email]');
     if (senderEl) {
       const container = senderEl.closest('[data-message-id]')
         || senderEl.closest('.gE') || senderEl.closest('.gs')
@@ -1485,7 +1485,7 @@
       const pd = banner.__gsiProfileDebug;
       if (pd) {
         debugLines.push('--- Profile Image ---');
-        debugLines.push(`hovercard el: ${pd.hovercardFound ? `${pd.hovercardTag} .${pd.hovercardClass}` : 'not found'} | bg-color: ${pd.hovercardBgColor || '?'} | matched: ${pd.matchedUrl ? pd.matchSource : 'no'}`);
+        debugLines.push(`hovercard el: ${pd.hovercardFound ? `${pd.hovercardTag} .${pd.hovercardClass}` : 'not found'} | matched: ${pd.matchedUrl ? pd.matchSource : 'no'}`);
         if (pd.candidates.length > 0) {
           for (const c of pd.candidates) {
             debugLines.push(`  ${c}`);
@@ -1528,9 +1528,12 @@
         const newLogo = createLogoImg(origInfo, (sourceKey) => updateBadge(newBadge, sourceKey));
         oldLogo.replaceWith(newLogo);
         if (oldBadge) oldBadge.replaceWith(newBadge);
+        else bannerText.appendChild(newBadge);
 
         // Update profile image to original sender's photo
         const oldProfile = bannerText.querySelector('.gsi-profile-img');
+        const oldProfileName = bannerText.querySelector('.gsi-profile-name');
+        if (oldProfileName) oldProfileName.remove();
         const origProfileResult = extractProfileImageUrl(originalSender);
         if (origProfileResult.url) {
           const profileImg = document.createElement('img');
@@ -1538,7 +1541,7 @@
           profileImg.src = origProfileResult.url;
           profileImg.width = 24;
           profileImg.height = 24;
-          profileImg.alt = 'Sender profile';
+          profileImg.alt = origProfileResult.debug?.dataName || 'Sender profile';
           profileImg.onerror = () => profileImg.remove();
           if (oldProfile) oldProfile.replaceWith(profileImg);
           else {
@@ -1549,10 +1552,21 @@
               bannerText.appendChild(profileImg);
             }
           }
+          // Add sender name after profile image if available
+          const dataName = origProfileResult.debug?.dataName;
+          if (dataName) {
+            const nameSpan = document.createElement('span');
+            nameSpan.classList.add('gsi-profile-name');
+            nameSpan.textContent = dataName;
+            if (profileImg.nextSibling) {
+              bannerText.insertBefore(nameSpan, profileImg.nextSibling);
+            } else {
+              bannerText.appendChild(nameSpan);
+            }
+          }
         } else if (oldProfile) {
           oldProfile.remove();
         }
-        else bannerText.appendChild(newBadge);
 
         const domainEl = bannerText.querySelector('.gsi-banner-domain');
         if (domainEl) domainEl.textContent = origInfo.fullDomain;
