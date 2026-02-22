@@ -82,10 +82,13 @@ The banner (`#gsi-banner`) top row contains, in order:
 
 | Element | Class | Description |
 |---------|-------|-------------|
-| Logo | `.gsi-logo` | 40×40 sender logo from BIMI/favicon chain |
+| Logo | `.gsi-logo` | 40×40 sender logo from BIMI/favicon chain (rounded square) |
 | Verdict badge | `.gsi-banner-verdict` | 18×18 SVG icon (caution triangle or danger circle). Hidden when trusted. |
-| Domain text | `.gsi-banner-text` | Full domain, root domain (if different), source badge, and via badge |
+| Domain text | `.gsi-banner-text` | Full domain, profile image, root domain (if different), source badge, and via badge |
+| Profile image | `.gsi-profile-img` | 24×24 circular Gmail profile photo inline after domain (conditional — only real photos) |
 | Source badge | `.gsi-source-badge` | Context-dependent text next to domain (see below) |
+
+**Profile image detection:** `extractProfileImageUrl()` finds Gmail's avatar mask element (`img.ajn[data-hovercard-id]`) and checks if its `src` is a `googleusercontent.com` URL (real photo). Gmail lazy-loads the avatar `src` after initial render, so the banner retries at 500ms and 1500ms if the first attempt finds only the mask placeholder. Default avatars (colored background, no photo) are skipped. On load failure, `onerror` removes the element silently.
 
 ### Source Badge Behavior
 

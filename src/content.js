@@ -981,6 +981,65 @@
     currentBannerEmail = null;
   }
 
+  /**
+   * Extract Gmail profile image URL for a sender.
+   * Gmail renders the avatar on an element with data-hovercard-id matching the
+   * sender email, often outside the message container. The avatar may be an <img>
+   * with a googleusercontent URL, or a background-image, or have a child <img>.
+   * Returns { url, debug } where debug contains diagnostic info for the debug section.
+   */
+  function extractProfileImageUrl(envelopeEmail) {
+    const debug = { senderFound: false, hovercardFound: false, hovercardTag: null, hovercardClass: null, matchedUrl: null, matchSource: null, dataName: null, candidates: [] };
+
+    if (!envelopeEmail) return { url: null, debug };
+    debug.senderFound = true;
+
+    // Strategy 1: Find the avatar mask <img> with data-hovercard-id matching the sender.
+    // Must target img.ajn specifically — other elements like .yP spans also carry this attribute.
+    const hovercardEl = document.querySelector(`img.ajn[data-hovercard-id="${envelopeEmail}"]`);
+    if (hovercardEl) {
+      debug.dataName = hovercardEl.getAttribute('data-name') || null;
+      debug.hovercardFound = true;
+      debug.hovercardTag = hovercardEl.tagName;
+      debug.hovercardClass = hovercardEl.className?.substring(0, 60) || '';
+
+      // Gmail lazy-loads the real photo src onto the mask <img> after initial render.
+      // Check if the src has already been updated to a googleusercontent URL.
+      // Skip default/placeholder avatars (e.g. "default-user" in the URL).
+      if (hovercardEl.src && hovercardEl.src.includes('googleusercontent.com')
+          && !hovercardEl.src.includes('default-user')) {
+        debug.matchedUrl = hovercardEl.src;
+        debug.matchSource = 'hovercard-src';
+        debug.candidates.push(`hovercard-src: ${hovercardEl.src.substring(0, 150)}`);
+        return { url: debug.matchedUrl, debug };
+      }
+      debug.candidates.push(`hovercard-src: ${(hovercardEl.src || '(none)').substring(0, 150)}`);
+
+      if (debug.matchedUrl) return { url: debug.matchedUrl, debug };
+    }
+
+    // Strategy 2: Broader search — find any img near .gD[email] with googleusercontent src
+    const senderEl = document.querySelector(`.gD[email="${envelopeEmail}"]`) || document.querySelector('.gD[email]');
+    if (senderEl) {
+      const container = senderEl.closest('[data-message-id]')
+        || senderEl.closest('.gE') || senderEl.closest('.gs')
+        || senderEl.closest('.adn');
+      if (container) {
+        for (const img of container.querySelectorAll('img')) {
+          if (img.src && img.src.includes('googleusercontent.com/a')
+              && !img.src.includes('default-user')) {
+            debug.candidates.push(`container-img: ${img.src.substring(0, 120)}`);
+            debug.matchedUrl = img.src;
+            debug.matchSource = 'container-img';
+            return { url: debug.matchedUrl, debug };
+          }
+        }
+      }
+    }
+
+    return { url: null, debug };
+  }
+
   function insertBanner(info, envelopeEmail) {
     removeBanner();
 
@@ -1038,6 +1097,61 @@
     }
 
     textWrap.appendChild(sourceBadge);
+
+    // Profile image — inserted after domain, as a small circular avatar
+    function tryAddProfileImage() {
+      const result = extractProfileImageUrl(envelopeEmail);
+      banner.__gsiProfileDebug = result.debug;
+      if (result.url) {
+        // Remove previous attempts
+        const old = textWrap.querySelector('.gsi-profile-img');
+        if (old) old.remove();
+        const oldName = textWrap.querySelector('.gsi-profile-name');
+        if (oldName) oldName.remove();
+
+        const profileImg = document.createElement('img');
+        profileImg.classList.add('gsi-profile-img');
+        profileImg.src = result.url;
+        profileImg.width = 24;
+        profileImg.height = 24;
+        profileImg.alt = result.debug.dataName || 'Sender profile';
+        profileImg.onerror = () => profileImg.remove();
+
+        // Insert after domain span
+        const domainEl = textWrap.querySelector('.gsi-banner-domain');
+        const insertBefore = domainEl ? domainEl.nextSibling : null;
+        if (insertBefore) {
+          textWrap.insertBefore(profileImg, insertBefore);
+        } else {
+          textWrap.appendChild(profileImg);
+        }
+
+        // Add sender name after profile image if available
+        if (result.debug.dataName) {
+          const nameSpan = document.createElement('span');
+          nameSpan.classList.add('gsi-profile-name');
+          nameSpan.textContent = result.debug.dataName;
+          // Insert right after the profile image
+          if (profileImg.nextSibling) {
+            textWrap.insertBefore(nameSpan, profileImg.nextSibling);
+          } else {
+            textWrap.appendChild(nameSpan);
+          }
+        }
+        return true;
+      }
+      return false;
+    }
+
+    if (!tryAddProfileImage()) {
+      setTimeout(() => {
+        if (banner.isConnected) tryAddProfileImage();
+      }, 500);
+      setTimeout(() => {
+        if (banner.isConnected && !textWrap.querySelector('.gsi-profile-img')) tryAddProfileImage();
+      }, 1500);
+    }
+
     topRow.appendChild(textWrap);
 
     // Gemini AI indicator (top-right, shown once Prompt API is confirmed available)
@@ -1367,6 +1481,20 @@
       }
       debugLines.push(`BIMI: ${info.logoSource === 'bimi' ? 'pass (DNS)' : 'none'}`);
 
+      // Profile image diagnostics
+      const pd = banner.__gsiProfileDebug;
+      if (pd) {
+        debugLines.push('--- Profile Image ---');
+        debugLines.push(`hovercard el: ${pd.hovercardFound ? `${pd.hovercardTag} .${pd.hovercardClass}` : 'not found'} | bg-color: ${pd.hovercardBgColor || '?'} | matched: ${pd.matchedUrl ? pd.matchSource : 'no'}`);
+        if (pd.candidates.length > 0) {
+          for (const c of pd.candidates) {
+            debugLines.push(`  ${c}`);
+          }
+        }
+        if (pd.matchedUrl) debugLines.push(`profile URL: ${pd.matchedUrl}`);
+        if (pd.domSnippet) debugLines.push(`DOM near hovercard:\n${pd.domSnippet}`);
+      }
+
       // Include AI diagnostics if the AI block finished before the debug section was built
       if (banner.__gsiAiDebug) {
         debugLines.push(...banner.__gsiAiDebug);
@@ -1389,6 +1517,7 @@
       if (!origInfo) return;
 
       // Update banner top row with original sender info
+      const logoContainer = banner.querySelector('.gsi-banner-logos');
       const oldLogo = banner.querySelector('.gsi-logo');
       const bannerText = banner.querySelector('.gsi-banner-text');
       const oldBadge = bannerText?.querySelector('.gsi-source-badge');
@@ -1399,6 +1528,30 @@
         const newLogo = createLogoImg(origInfo, (sourceKey) => updateBadge(newBadge, sourceKey));
         oldLogo.replaceWith(newLogo);
         if (oldBadge) oldBadge.replaceWith(newBadge);
+
+        // Update profile image to original sender's photo
+        const oldProfile = bannerText.querySelector('.gsi-profile-img');
+        const origProfileResult = extractProfileImageUrl(originalSender);
+        if (origProfileResult.url) {
+          const profileImg = document.createElement('img');
+          profileImg.classList.add('gsi-profile-img');
+          profileImg.src = origProfileResult.url;
+          profileImg.width = 24;
+          profileImg.height = 24;
+          profileImg.alt = 'Sender profile';
+          profileImg.onerror = () => profileImg.remove();
+          if (oldProfile) oldProfile.replaceWith(profileImg);
+          else {
+            const domainEl = bannerText.querySelector('.gsi-banner-domain');
+            if (domainEl && domainEl.nextSibling) {
+              bannerText.insertBefore(profileImg, domainEl.nextSibling);
+            } else {
+              bannerText.appendChild(profileImg);
+            }
+          }
+        } else if (oldProfile) {
+          oldProfile.remove();
+        }
         else bannerText.appendChild(newBadge);
 
         const domainEl = bannerText.querySelector('.gsi-banner-domain');
