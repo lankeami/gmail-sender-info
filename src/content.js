@@ -678,16 +678,20 @@
    * Returns { displayName, senderEmail, subject, bodyText, links }.
    */
   function extractEmailData(envelopeEmail) {
-    // Display name from .gD element textContent
-    const senderEl = document.querySelector('.gD[email]');
+    // Scope selectors to the specific message container (conversation view safety)
+    const senderSelector = envelopeEmail ? `.gD[email="${envelopeEmail}"]` : '.gD[email]';
+    let senderEl = document.querySelector(senderSelector);
+    if (!senderEl) senderEl = document.querySelector('.gD[email]');
     const displayName = senderEl ? senderEl.textContent.trim() : '';
 
+    const msgContainer = (senderEl && (senderEl.closest('.adn') || senderEl.closest('.gs'))) || document;
+
     // Subject line
-    const subjectEl = document.querySelector('.hP');
+    const subjectEl = msgContainer.querySelector('.hP') || document.querySelector('.hP');
     const subject = subjectEl ? subjectEl.textContent.trim() : '';
 
     // Body text (truncated to ~2000 chars to fit token limits)
-    const bodyEl = document.querySelector('.ii .a3s');
+    const bodyEl = msgContainer.querySelector('.ii .a3s') || document.querySelector('.ii .a3s');
     const bodyText = bodyEl ? bodyEl.innerText.substring(0, 2000) : '';
 
     // Links in the body
@@ -868,7 +872,9 @@
       if (onRetry) {
         const refreshBtn = document.createElement('button');
         refreshBtn.classList.add('gsi-ai-refresh-btn');
+        refreshBtn.type = 'button';
         refreshBtn.title = 'Re-run AI analysis';
+        refreshBtn.setAttribute('aria-label', 'Re-run AI analysis');
         refreshBtn.textContent = '\u21BB';
         refreshBtn.addEventListener('click', () => {
           row.remove();
@@ -1176,6 +1182,7 @@
       }
       let scanIdx = 0;
       const scanInterval = setInterval(() => {
+        if (!banner.isConnected) { clearInterval(scanInterval); return; }
         scanIdx = (scanIdx + 1) % AI_SCAN_MESSAGES.length;
         scanText.textContent = AI_SCAN_MESSAGES[scanIdx];
       }, 2500);
@@ -1191,7 +1198,7 @@
       const aiSection = createAiSection(aiStatus);
 
       // Insert before debug section if it exists, otherwise append
-      const debugWrap = accordionContent.querySelector('.gsi-ai-section + div, div[style*="border-top"]');
+      const debugWrap = accordionContent.querySelector('.gsi-debug-section');
       if (debugWrap) {
         accordionContent.insertBefore(aiSection, debugWrap);
       } else {
@@ -1238,6 +1245,7 @@
       const result = await requestAiAnalysis(emailData);
       clearInterval(scanInterval);
       scanText.remove();
+      if (!banner.isConnected) return; // banner was removed while waiting
       updateAiSection(aiSection, result, banner, handleRetry);
       applyResult(result);
     })();
@@ -1284,6 +1292,7 @@
 
       // DEBUG: collapsible section in accordion (collapsed by default)
       const debugWrap = document.createElement('div');
+      debugWrap.classList.add('gsi-debug-section');
       debugWrap.style.cssText = 'margin-top:6px;border-top:1px solid #e8eaed;padding-top:4px';
       const debugHeader = document.createElement('div');
       debugHeader.style.cssText = 'font-size:10px;color:#80868b;cursor:pointer;user-select:none';

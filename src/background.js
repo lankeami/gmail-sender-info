@@ -236,35 +236,52 @@ Rules:
 - reasons: ALWAYS provide 1-3 strings explaining your reasoning. Each reason must be a complete, readable sentence fragment.`;
 
 let aiSession = null;
+let aiSessionPromise = null; // deduplicates concurrent create() calls
 let aiAvailable = null; // null = unchecked, true/false
+let aiAvailableCheckedAt = 0;
+const AI_AVAILABLE_RECHECK_MS = 60000; // re-check availability every 60s if false
 
 async function checkAiAvailable() {
+  // Re-check if previously false and TTL expired (model may have finished downloading)
+  if (aiAvailable === false && Date.now() - aiAvailableCheckedAt > AI_AVAILABLE_RECHECK_MS) {
+    aiAvailable = null;
+  }
   if (aiAvailable !== null) return aiAvailable;
   try {
     if (typeof LanguageModel === 'undefined') {
       aiAvailable = false;
+      aiAvailableCheckedAt = Date.now();
       return false;
     }
     const status = await LanguageModel.availability();
     aiAvailable = status !== 'unavailable';
+    aiAvailableCheckedAt = Date.now();
     return aiAvailable;
   } catch {
     aiAvailable = false;
+    aiAvailableCheckedAt = Date.now();
     return false;
   }
 }
 
 async function getAiSession() {
   if (aiSession) return aiSession;
-  try {
-    aiSession = await LanguageModel.create({
-      initialPrompts: [{ role: 'system', content: AI_SYSTEM_PROMPT }],
-    });
-    return aiSession;
-  } catch {
-    aiAvailable = false;
-    return null;
-  }
+  // Deduplicate concurrent calls — return the same in-flight promise
+  if (aiSessionPromise) return aiSessionPromise;
+  aiSessionPromise = (async () => {
+    try {
+      aiSession = await LanguageModel.create({
+        initialPrompts: [{ role: 'system', content: AI_SYSTEM_PROMPT }],
+      });
+      return aiSession;
+    } catch {
+      aiAvailable = false;
+      return null;
+    } finally {
+      aiSessionPromise = null;
+    }
+  })();
+  return aiSessionPromise;
 }
 
 /**
@@ -422,6 +439,22 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     }
 
     (async () => {
+      async function runPrompt(session, retried) {
+        const clone = await session.clone();
+        try {
+          const userPrompt = buildAiUserPrompt(data);
+          const t0 = Date.now();
+          const rawResponse = await clone.prompt(userPrompt);
+          const durationMs = Date.now() - t0;
+          const result = parseAiResult(rawResponse);
+          const response = { ...result, debug: { rawResponse, userPrompt, durationMs, cached: false, retried } };
+          aiResultCache.set(cacheKey, response);
+          return response;
+        } finally {
+          clone.destroy();
+        }
+      }
+
       try {
         const available = await checkAiAvailable();
         if (!available) {
@@ -435,16 +468,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
           return;
         }
 
-        const clone = await session.clone();
-        const userPrompt = buildAiUserPrompt(data);
-        const t0 = Date.now();
-        const rawResponse = await clone.prompt(userPrompt);
-        const durationMs = Date.now() - t0;
-        clone.destroy();
-
-        const result = parseAiResult(rawResponse);
-        const response = { ...result, debug: { rawResponse, userPrompt, durationMs, cached: false } };
-        aiResultCache.set(cacheKey, response);
+        const response = await runPrompt(session, false);
         sendResponse(response);
       } catch (e) {
         // Session may have been garbage collected — reset and retry once
@@ -453,21 +477,13 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
           try {
             const session = await getAiSession();
             if (session) {
-              const clone = await session.clone();
-              const userPrompt = buildAiUserPrompt(data);
-              const t0 = Date.now();
-              const rawResponse = await clone.prompt(userPrompt);
-              const durationMs = Date.now() - t0;
-              clone.destroy();
-              const result = parseAiResult(rawResponse);
-              const response = { ...result, debug: { rawResponse, userPrompt, durationMs, cached: false, retried: true } };
-              aiResultCache.set(cacheKey, response);
+              const response = await runPrompt(session, true);
               sendResponse(response);
               return;
             }
           } catch { /* fall through */ }
         }
-        sendResponse({ verdict: 'Caution', reasons: ['AI analysis failed'], debug: { error: e.message || 'unknown error' } });
+        sendResponse({ verdict: null, summary: '', reasons: [], parseError: e.message || 'unknown error', debug: { error: e.message || 'unknown error' } });
       }
     })();
 
