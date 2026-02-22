@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Gmail Sender Info",
-  "version": "2026.0214.1254",
+  "version": "2026.0222.1425",
   "description": "Shows sender domain info, logo, and favicon on Gmail inbox rows and email view.",
   "permissions": ["storage"],
   "host_permissions": [
