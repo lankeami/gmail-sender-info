@@ -125,10 +125,9 @@ Always visible below the main strip (not inside the expandable details). Uses Ch
 
 Hidden by default, toggled by expand arrow. Single-column stacked layout:
 
-1. **Security** (`.gsi-details-section`) — Full SPF/DKIM/DMARC/BIMI result values
-2. **Logo Source** (`.gsi-details-source`) — Which source resolved (BIMI, favicon, unknown)
-3. **AI Analysis** — Full bulleted reasons list (`.gsi-ai-reasons` / `.gsi-ai-reason-item`)
-4. **Debug** (`.gsi-debug-section`) — Nested collapsible with envelope email, headers, BIMI DNS status
+1. **Favicon/Logo Source** (`.gsi-favicon-table`) — Comparison table showing subdomain, root, and www favicons with domains. Source line below shows which resolved (BIMI, favicon, unknown)
+2. **AI Analysis** — Full bulleted reasons list (`.gsi-ai-reasons` / `.gsi-ai-reason-item`)
+3. **Debug** (`.gsi-debug-section`) — Nested collapsible with envelope email, headers, BIMI DNS status
 
 ## Development
 

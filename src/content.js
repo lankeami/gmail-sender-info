@@ -454,17 +454,12 @@
    * @param {string} envelopeEmail - envelope sender email
    * @param {Object} bannerState - shared state for logo/auth coordination
    */
-  function createSecuritySection(pills, geminiIcon, detailsSecSection, info, envelopeEmail, bannerState) {
+  function createSecuritySection(pills, geminiIcon, info, envelopeEmail, bannerState) {
     (async () => {
       const msgResult = getMessageId();
       if (!msgResult) {
         updateVerdictPill(pills.verdict, 'caution');
         updateGeminiColor(geminiIcon, 'caution');
-        const errRow = document.createElement('div');
-        errRow.classList.add('gsi-details-row');
-        errRow.textContent = 'Unable to find message ID';
-        errRow.style.color = '#c62828';
-        detailsSecSection.appendChild(errRow);
         return;
       }
 
@@ -475,11 +470,6 @@
         if (result.error) {
           updateVerdictPill(pills.verdict, 'caution');
           updateGeminiColor(geminiIcon, 'caution');
-          const errRow = document.createElement('div');
-          errRow.classList.add('gsi-details-row');
-          errRow.textContent = `Unable to check (${result.error})`;
-          errRow.style.color = '#c62828';
-          detailsSecSection.appendChild(errRow);
           return;
         }
         authResults = result.authData || parseAuthResults(result.headers);
@@ -503,19 +493,7 @@
         if (value === 'pass') updatePillState(pill, 'pass', label);
         else if (value === 'fail' || value === 'softfail') updatePillState(pill, 'fail', label);
         else updatePillState(pill, 'loading', label); // n/a
-
-        // Populate details panel row with full value
-        const row = document.createElement('div');
-        row.classList.add('gsi-details-row');
-        row.textContent = `${label}: ${value || 'n/a'}`;
-        detailsSecSection.appendChild(row);
       }
-
-      // BIMI row in details (not in strip pills)
-      const bimiRow = document.createElement('div');
-      bimiRow.classList.add('gsi-details-row');
-      bimiRow.textContent = `BIMI: ${info.logoSource === 'bimi' ? 'pass (DNS)' : 'none'}`;
-      detailsSecSection.appendChild(bimiRow);
 
       // Compute verdict (same logic as before)
       let verdictKey = getVerdict(authResults, info);
@@ -1003,29 +981,65 @@
       expandArrow.textContent = isOpen ? '\u25BC' : '\u25B2';
     });
 
-    // 1. Security details section
-    const secSection = document.createElement('div');
-    secSection.classList.add('gsi-details-section');
-    const secLabel = document.createElement('div');
-    secLabel.classList.add('gsi-details-label');
-    secLabel.textContent = 'Security';
-    secSection.appendChild(secLabel);
-    // Security detail rows populated by createSecuritySection callback
-    detailsPanel.appendChild(secSection);
+    // 1. Favicon / logo source table
+    if (info.favicons) {
+      const favSection = document.createElement('div');
+      favSection.classList.add('gsi-details-section');
+      const favLabel = document.createElement('div');
+      favLabel.classList.add('gsi-details-label');
+      favLabel.textContent = 'Logo Source';
+      favSection.appendChild(favLabel);
 
-    // 2. Logo source section
-    const srcSection = document.createElement('div');
-    srcSection.classList.add('gsi-details-section');
-    const srcLabel = document.createElement('div');
-    srcLabel.classList.add('gsi-details-label');
-    srcLabel.textContent = 'Logo Source';
-    srcSection.appendChild(srcLabel);
-    const srcText = document.createElement('div');
-    srcText.classList.add('gsi-details-source');
-    srcText.textContent = 'Resolving\u2026';
-    srcSection.appendChild(srcText);
-    srcTextEl = srcText; // wire up to logo callback
-    detailsPanel.appendChild(srcSection);
+      const favTable = document.createElement('div');
+      favTable.classList.add('gsi-favicon-table');
+
+      const entries = [
+        { key: 'sub', label: 'subdomain' },
+        { key: 'root', label: 'root' },
+        { key: 'www', label: 'www' },
+      ];
+      for (const { key, label } of entries) {
+        const fav = info.favicons[key];
+        if (!fav) continue;
+        const row = document.createElement('div');
+        row.classList.add('gsi-favicon-row');
+
+        const icon = document.createElement('img');
+        icon.classList.add('gsi-favicon-icon');
+        icon.width = 16;
+        icon.height = 16;
+        const iconChain = [];
+        if (fav.googleUrl) iconChain.push(fav.googleUrl);
+        iconChain.push(fav.directUrl);
+        iconChain.push(CAUTION_URL);
+        let iconIdx = 0;
+        icon.onerror = () => { iconIdx++; if (iconIdx < iconChain.length) icon.src = iconChain[iconIdx]; };
+        icon.src = iconChain[0];
+        row.appendChild(icon);
+
+        const labelEl = document.createElement('span');
+        labelEl.classList.add('gsi-favicon-label');
+        labelEl.textContent = label;
+        row.appendChild(labelEl);
+
+        const domainEl = document.createElement('span');
+        domainEl.classList.add('gsi-favicon-domain');
+        domainEl.textContent = fav.domain;
+        row.appendChild(domainEl);
+
+        favTable.appendChild(row);
+      }
+
+      // Source line below the table
+      const srcText = document.createElement('div');
+      srcText.classList.add('gsi-details-source');
+      srcText.textContent = 'Resolving\u2026';
+      srcTextEl = srcText;
+
+      favSection.appendChild(favTable);
+      favSection.appendChild(srcText);
+      detailsPanel.appendChild(favSection);
+    }
 
     // 3. AI analysis details (populated after AI result)
     const aiDetailsSection = document.createElement('div');
@@ -1037,11 +1051,10 @@
 
     banner.appendChild(detailsPanel);
 
-    // Wire up security section to update pills + populate details
+    // Wire up security section to update pills
     createSecuritySection(
       { spf: spfPill, dkim: dkimPill, dmarc: dmarcPill, verdict: verdictPill },
       geminiIcon,
-      secSection,
       info,
       envelopeEmail,
       bannerState
