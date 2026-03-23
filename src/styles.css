@@ -118,6 +118,11 @@
   background: #f1f3f4;
 }
 
+.gsi-pill-warn {
+  color: #e65100;
+  background: #fff3e0;
+}
+
 .gsi-pill-verdict {
   font-size: 11px;
   padding: 2px 8px;

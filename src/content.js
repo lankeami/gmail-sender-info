@@ -330,6 +330,55 @@
   }
 
   /**
+   * Parse To, Cc, and Delivered-To from raw email headers.
+   * Returns { to, cc, deliveredTo } with raw header values.
+   */
+  function parseRecipientHeaders(headerText) {
+    const unfolded = headerText.replace(/\r?\n[ \t]+/g, ' ');
+    const lines = unfolded.split(/\r?\n/);
+    const result = {};
+    for (const line of lines) {
+      const lower = line.toLowerCase();
+      if (lower.startsWith('to:')) {
+        result.to = line.substring('to:'.length).trim();
+      } else if (lower.startsWith('cc:')) {
+        result.cc = line.substring('cc:'.length).trim();
+      } else if (lower.startsWith('delivered-to:')) {
+        result.deliveredTo = line.substring('delivered-to:'.length).trim().toLowerCase();
+      }
+    }
+    return Object.keys(result).length > 0 ? result : null;
+  }
+
+  /**
+   * Determine if the current user was BCC'd on this email.
+   * Checks if the user's email appears in To or Cc headers.
+   * @param {Object} recipientHeaders - from parseRecipientHeaders or authData
+   * @returns {'bcc'|'direct'|null} - bcc if not found in To/Cc, direct if found, null if unknown
+   */
+  function detectBccStatus(recipientHeaders) {
+    if (!recipientHeaders) return null;
+    const userEmail = recipientHeaders.deliveredTo;
+    if (!userEmail) return null;
+
+    const toCc = ((recipientHeaders.to || '') + ' ' + (recipientHeaders.cc || '')).toLowerCase();
+    if (!toCc.trim()) return null;
+
+    // Check if user's email appears in To or Cc
+    if (toCc.includes(userEmail)) return 'direct';
+    // Also check without +alias: user+tag@gmail.com → user@gmail.com
+    const atIdx = userEmail.indexOf('@');
+    if (atIdx > 0) {
+      const plusIdx = userEmail.indexOf('+');
+      if (plusIdx > 0 && plusIdx < atIdx) {
+        const baseEmail = userEmail.substring(0, plusIdx) + userEmail.substring(atIdx);
+        if (toCc.includes(baseEmail)) return 'direct';
+      }
+    }
+    return 'bcc';
+  }
+
+  /**
    * Extract full raw header lines by name from email header text.
    * Returns an object mapping header names to their full unfolded line(s).
    * Collects all occurrences for headers that may appear multiple times.
@@ -654,7 +703,8 @@
       }
     }
 
-    return { displayName, senderEmail: envelopeEmail, subject, bodyText, links };
+    const isEmptyBody = !bodyText || bodyText.trim().length < 10;
+    return { displayName, senderEmail: envelopeEmail, subject, bodyText, links, isEmptyBody };
   }
 
   const AI_MIN_CHROME_VERSION = 138;
@@ -931,6 +981,21 @@
     const verdictPill = createPill('Checking', 'loading', true);
     stripRow.appendChild(verdictPill);
 
+    // Warning pills (hidden by default, shown when detected)
+    const bccPill = document.createElement('span');
+    bccPill.classList.add('gsi-pill', 'gsi-pill-warn');
+    bccPill.textContent = 'BCC';
+    bccPill.title = 'You were BCC\u2019d on this email';
+    bccPill.style.display = 'none';
+    stripRow.appendChild(bccPill);
+
+    const emptyBodyPill = document.createElement('span');
+    emptyBodyPill.classList.add('gsi-pill', 'gsi-pill-warn');
+    emptyBodyPill.textContent = 'EMPTY';
+    emptyBodyPill.title = 'Email body is empty or near-empty';
+    emptyBodyPill.style.display = 'none';
+    stripRow.appendChild(emptyBodyPill);
+
     // Spacer
     const spacer = document.createElement('div');
     spacer.style.flex = '1';
@@ -1095,7 +1160,13 @@
         }
       }
 
+      // Show empty body pill immediately (no async needed)
+      if (emailData.isEmptyBody) {
+        emptyBodyPill.style.display = '';
+      }
+
       // Use X-Original-Sender for AI scoring when it points to a different domain
+      // Also detect BCC status from To/Cc headers
       if (msgResult) {
         const headerResult = await fetchEmailHeaders(msgResult.id);
         if (!headerResult.error) {
@@ -1112,6 +1183,25 @@
             if (origDomain && origDomain !== envDomain) {
               emailData.senderEmail = origSender;
             }
+          }
+
+          // BCC detection from To/Cc headers
+          let recipientHeaders = null;
+          if (headerResult.authData) {
+            recipientHeaders = {
+              to: headerResult.authData.toHeader || '',
+              cc: headerResult.authData.ccHeader || '',
+              deliveredTo: headerResult.authData.deliveredTo || '',
+            };
+          } else if (headerResult.headers) {
+            recipientHeaders = parseRecipientHeaders(headerResult.headers);
+          }
+          const bccStatus = detectBccStatus(recipientHeaders);
+          if (bccStatus === 'bcc') {
+            bccPill.style.display = '';
+            emailData.recipientStatus = 'bcc';
+          } else if (bccStatus === 'direct') {
+            emailData.recipientStatus = 'direct';
           }
         }
       }
