@@ -379,18 +379,7 @@
     return result;
   }
 
-  // --- Summary verdict SVGs ---
-
-  const VERDICT_TRUSTED_SVG = '<svg viewBox="0 0 24 24" width="36" height="36"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5L12 1z" fill="#4caf50"/><path d="M10 15.5l-3.5-3.5 1.41-1.41L10 12.67l5.59-5.59L17 8.5l-7 7z" fill="#fff"/></svg>';
-  const VERDICT_CAUTION_SVG = '<svg viewBox="0 0 24 24" width="36" height="36"><path d="M12 2L1 21h22L12 2z" fill="#F59E0B" stroke="#D97706" stroke-width=".5"/><rect x="11" y="9" width="2" height="6" rx="1" fill="#fff"/><rect x="11" y="17" width="2" height="2" rx="1" fill="#fff"/></svg>';
-  const VERDICT_DANGER_SVG = '<svg viewBox="0 0 24 24" width="36" height="36"><circle cx="12" cy="12" r="11" fill="#ef4444"/><path d="M8 8l8 8M16 8l-8 8" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/></svg>';
-
-  const VERDICTS = {
-    trusted:  { svg: '', label: '', cls: 'gsi-verdict-trusted' },
-    caution:  { svg: VERDICT_CAUTION_SVG, label: 'Use Caution', cls: 'gsi-verdict-caution' },
-    dangerous: { svg: VERDICT_DANGER_SVG, label: 'Not Trusted', cls: 'gsi-verdict-danger' },
-    loading:  { svg: '', label: 'Checking\u2026', cls: 'gsi-verdict-loading' },
-  };
+  // --- Verdict logic ---
 
   function getVerdict(authResults, info) {
     if (!authResults) return 'caution';
@@ -404,169 +393,165 @@
     return 'caution';
   }
 
-  // Smaller SVGs for the inline banner badge (18×18)
-  const VERDICT_CAUTION_SVG_SM = '<svg viewBox="0 0 24 24" width="18" height="18"><path d="M12 2L1 21h22L12 2z" fill="#F59E0B" stroke="#D97706" stroke-width=".5"/><rect x="11" y="9" width="2" height="6" rx="1" fill="#fff"/><rect x="11" y="17" width="2" height="2" rx="1" fill="#fff"/></svg>';
-  const VERDICT_DANGER_SVG_SM = '<svg viewBox="0 0 24 24" width="18" height="18"><circle cx="12" cy="12" r="11" fill="#ef4444"/><path d="M8 8l8 8M16 8l-8 8" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/></svg>';
+  // --- Strip pill helpers ---
 
-  const VERDICTS_SM = {
-    caution:  { svg: VERDICT_CAUTION_SVG_SM, label: 'Use Caution' },
-    dangerous: { svg: VERDICT_DANGER_SVG_SM, label: 'Not Trusted' },
-  };
-
-  function setVerdict(summaryEl, verdictKey, bannerBadgeEl) {
-    // Update inline banner badge
-    if (bannerBadgeEl) {
-      if (verdictKey === 'trusted') {
-        bannerBadgeEl.style.display = 'none';
-      } else {
-        const sm = VERDICTS_SM[verdictKey] || VERDICTS_SM.caution;
-        bannerBadgeEl.style.display = '';
-        bannerBadgeEl.className = 'gsi-banner-verdict gsi-banner-verdict-' + verdictKey;
-        // Safe: hardcoded SVG constants, not user input
-        bannerBadgeEl.querySelector('.gsi-banner-verdict-icon').innerHTML = sm.svg;
-      }
-    }
-
-    // Update accordion summary column
-    if (verdictKey === 'trusted') {
-      summaryEl.style.display = 'none';
-      return;
-    }
-    const v = VERDICTS[verdictKey] || VERDICTS.caution;
-    summaryEl.className = 'gsi-summary ' + v.cls;
-    summaryEl.style.display = '';
-    // Safe: hardcoded SVG constants, not user input
-    summaryEl.querySelector('.gsi-summary-icon').innerHTML = v.svg;
-    summaryEl.querySelector('.gsi-summary-label').textContent = v.label;
+  function createPill(label, state, isVerdict = false) {
+    const pill = document.createElement('span');
+    pill.classList.add('gsi-pill');
+    if (isVerdict) pill.classList.add('gsi-pill-verdict');
+    pill.textContent = state === 'loading' ? (isVerdict ? 'Checking' : label) : label;
+    pill.dataset.check = label;
+    updatePillState(pill, state, label, isVerdict);
+    return pill;
   }
 
+  function updatePillState(pill, state, label, isVerdict = false) {
+    pill.classList.remove('gsi-pill-pass', 'gsi-pill-fail', 'gsi-pill-loading',
+      'gsi-pill-trusted', 'gsi-pill-caution', 'gsi-pill-dangerous');
+    if (isVerdict) {
+      const cls = { trusted: 'gsi-pill-trusted', caution: 'gsi-pill-caution', dangerous: 'gsi-pill-dangerous' };
+      pill.classList.add(cls[state] || 'gsi-pill-loading');
+      pill.textContent = state === 'loading' ? 'Checking' : state.charAt(0).toUpperCase() + state.slice(1);
+    } else {
+      if (state === 'pass') {
+        pill.classList.add('gsi-pill-pass');
+        pill.textContent = label + ' \u2713';
+      } else if (state === 'fail' || state === 'softfail') {
+        pill.classList.add('gsi-pill-fail');
+        pill.textContent = label + ' \u2717';
+      } else {
+        pill.classList.add('gsi-pill-loading');
+        pill.textContent = label;
+      }
+    }
+  }
+
+  function updateVerdictPill(pill, verdict) {
+    updatePillState(pill, verdict, '', true);
+  }
+
+  function updateGeminiColor(icon, verdict) {
+    icon.classList.remove('gsi-gemini-ok', 'gsi-gemini-caution', 'gsi-gemini-reject', 'gsi-gemini-neutral');
+    const map = { trusted: 'gsi-gemini-ok', caution: 'gsi-gemini-caution', dangerous: 'gsi-gemini-reject' };
+    icon.classList.add(map[verdict] || 'gsi-gemini-neutral');
+  }
+
+  function createSparkleSvg(size, fill) {
+    const svgNS = 'http://www.w3.org/2000/svg';
+    const svg = document.createElementNS(svgNS, 'svg');
+    svg.setAttribute('width', String(size));
+    svg.setAttribute('height', String(size));
+    svg.setAttribute('viewBox', '0 0 28 28');
+    svg.setAttribute('fill', 'none');
+    const path = document.createElementNS(svgNS, 'path');
+    path.setAttribute('d', 'M14 0C14 7.732 20.268 14 28 14C20.268 14 14 20.268 14 28C14 20.268 7.732 14 0 14C7.732 14 14 7.732 14 0Z');
+    path.setAttribute('fill', fill);
+    svg.appendChild(path);
+    svg.style.flexShrink = '0';
+    return svg;
+  }
+
+  function createGeminiIcon() {
+    const geminiIcon = document.createElement('span');
+    geminiIcon.classList.add('gsi-gemini-icon');
+    geminiIcon.title = 'AI analysis by Gemini Nano';
+    geminiIcon.appendChild(createSparkleSvg(14, 'currentColor'));
+    return geminiIcon;
+  }
+
+  // --- Logo source labels for details panel ---
+  const SOURCE_DETAIL_LABELS = {
+    bimi_full: 'BIMI (full domain)',
+    bimi_root: 'BIMI (root domain)',
+    bimi: 'BIMI',
+    favicon_sub: 'Favicon (subdomain)',
+    favicon_root: 'Favicon (root domain)',
+    favicon: 'Favicon',
+    unknown: 'Unknown (fallback)',
+  };
+
   /**
-   * Build the security checks column and update the summary verdict.
-   * Fetches headers async and updates the DOM when results arrive.
+   * Fetch auth results and update strip pills + details panel.
+   * @param {Object} pills - { spf, dkim, dmarc, verdict } pill elements in the strip
+   * @param {HTMLElement} geminiIcon - sparkle icon to color by verdict
+   * @param {HTMLElement} detailsSecSection - security section in details panel to populate
+   * @param {Object} info - sender info from background
+   * @param {string} envelopeEmail - envelope sender email
+   * @param {Object} bannerState - shared state for logo/auth coordination
    */
-  function createSecuritySection(container, summaryEl, info, envelopeEmail, bannerBadgeEl, sourceBadgeEl, bannerState) {
-    const sectionHeader = document.createElement('div');
-    sectionHeader.classList.add('gsi-col-header');
-    sectionHeader.textContent = 'Security';
-    container.appendChild(sectionHeader);
-
-    const loadingRow = document.createElement('div');
-    loadingRow.classList.add('gsi-security-loading');
-    loadingRow.textContent = 'Checking\u2026';
-    container.appendChild(loadingRow);
-
+  function createSecuritySection(pills, geminiIcon, detailsSecSection, info, envelopeEmail, bannerState) {
     (async () => {
       const msgResult = getMessageId();
       if (!msgResult) {
-        loadingRow.textContent = 'Unable to find message ID';
-        loadingRow.classList.add('gsi-security-error');
-        setVerdict(summaryEl, 'caution', bannerBadgeEl);
+        updateVerdictPill(pills.verdict, 'caution');
+        updateGeminiColor(geminiIcon, 'caution');
+        const errRow = document.createElement('div');
+        errRow.classList.add('gsi-details-row');
+        errRow.textContent = 'Unable to find message ID';
+        errRow.style.color = '#c62828';
+        detailsSecSection.appendChild(errRow);
         return;
       }
 
       const { id: messageId } = msgResult;
-
       let authResults = securityCache.get(messageId);
       if (!authResults) {
         const result = await fetchEmailHeaders(messageId);
         if (result.error) {
-          loadingRow.textContent = `Unable to check (${result.error})`;
-          loadingRow.classList.add('gsi-security-error');
-          setVerdict(summaryEl, 'caution', bannerBadgeEl);
+          updateVerdictPill(pills.verdict, 'caution');
+          updateGeminiColor(geminiIcon, 'caution');
+          const errRow = document.createElement('div');
+          errRow.classList.add('gsi-details-row');
+          errRow.textContent = `Unable to check (${result.error})`;
+          errRow.style.color = '#c62828';
+          detailsSecSection.appendChild(errRow);
           return;
         }
         authResults = result.authData || parseAuthResults(result.headers);
         if (authResults) securityCache.set(messageId, authResults);
       }
 
-      loadingRow.remove();
-
       if (!authResults) {
-        const noResults = document.createElement('div');
-        noResults.classList.add('gsi-security-loading');
-        noResults.textContent = 'No auth results found';
-        container.appendChild(noResults);
-        setVerdict(summaryEl, 'caution', bannerBadgeEl);
+        updateVerdictPill(pills.verdict, 'caution');
+        updateGeminiColor(geminiIcon, 'caution');
         return;
       }
 
+      // Update strip pills
       const checks = [
-        { key: 'spf', label: 'SPF' },
-        { key: 'dkim', label: 'DKIM' },
-        { key: 'dmarc', label: 'DMARC' },
+        { key: 'spf', pill: pills.spf, label: 'SPF' },
+        { key: 'dkim', pill: pills.dkim, label: 'DKIM' },
+        { key: 'dmarc', pill: pills.dmarc, label: 'DMARC' },
       ];
+      for (const { key, pill, label } of checks) {
+        const value = authResults[key];
+        if (value === 'pass') updatePillState(pill, 'pass', label);
+        else if (value === 'fail' || value === 'softfail') updatePillState(pill, 'fail', label);
+        else updatePillState(pill, 'loading', label); // n/a
 
-      for (const check of checks) {
+        // Populate details panel row with full value
         const row = document.createElement('div');
-        row.classList.add('gsi-security-row');
-
-        const label = document.createElement('span');
-        label.classList.add('gsi-security-label');
-        label.textContent = check.label;
-        row.appendChild(label);
-
-        const result = document.createElement('span');
-        result.classList.add('gsi-security-result');
-        const value = authResults[check.key];
-        if (value) {
-          result.textContent = value;
-          if (value === 'pass') result.classList.add('gsi-result-pass');
-          else if (value === 'fail' || value === 'softfail') result.classList.add('gsi-result-fail');
-          else result.classList.add('gsi-result-neutral');
-        } else {
-          result.textContent = 'n/a';
-          result.classList.add('gsi-result-neutral');
-        }
-        row.appendChild(result);
-        container.appendChild(row);
+        row.classList.add('gsi-details-row');
+        row.textContent = `${label}: ${value || 'n/a'}`;
+        detailsSecSection.appendChild(row);
       }
 
-      // BIMI row
+      // BIMI row in details (not in strip pills)
       const bimiRow = document.createElement('div');
-      bimiRow.classList.add('gsi-security-row');
-      const bimiLabel = document.createElement('span');
-      bimiLabel.classList.add('gsi-security-label');
-      bimiLabel.textContent = 'BIMI';
-      bimiRow.appendChild(bimiLabel);
-      const bimiResult = document.createElement('span');
-      bimiResult.classList.add('gsi-security-result');
-      if (info.logoSource === 'bimi') {
-        bimiResult.textContent = 'pass';
-        bimiResult.classList.add('gsi-result-pass');
-      } else {
-        bimiResult.textContent = 'none';
-        bimiResult.classList.add('gsi-result-neutral');
-      }
-      bimiRow.appendChild(bimiResult);
-      container.appendChild(bimiRow);
+      bimiRow.classList.add('gsi-details-row');
+      bimiRow.textContent = `BIMI: ${info.logoSource === 'bimi' ? 'pass (DNS)' : 'none'}`;
+      detailsSecSection.appendChild(bimiRow);
 
+      // Compute verdict (same logic as before)
       let verdictKey = getVerdict(authResults, info);
-      // No recognizable logo → cap verdict at caution
       if (bannerState && bannerState.resolvedLogoSource === SOURCE_UNKNOWN && verdictKey === 'trusted') {
         verdictKey = 'caution';
       }
       if (bannerState) bannerState.authVerdict = verdictKey;
 
-      // Update source badge based on auth results
-      if (sourceBadgeEl) {
-        const failures = [];
-        for (const { key, label } of checks) {
-          const v = authResults[key];
-          if (v && v !== 'pass' && v !== 'none') {
-            failures.push(`${label}: ${v}`);
-          }
-        }
-        if (failures.length > 0) {
-          sourceBadgeEl.textContent = failures.join(', ');
-          sourceBadgeEl.className = 'gsi-source-badge gsi-source-verdict-' + verdictKey;
-          sourceBadgeEl.style.display = '';
-        } else {
-          sourceBadgeEl.style.display = 'none';
-        }
-      }
-
-      // Update summary verdict
-      setVerdict(summaryEl, verdictKey, bannerBadgeEl);
+      // Update strip verdict pill and gemini icon
+      updateVerdictPill(pills.verdict, verdictKey);
+      updateGeminiColor(geminiIcon, verdictKey);
     })();
   }
 
@@ -769,156 +754,12 @@
     });
   }
 
-  const AI_SCAN_MESSAGES = [
-    'Scanning email\u2026',
-    'Checking sender identity\u2026',
-    'Analyzing links\u2026',
-    'Reviewing content\u2026',
-    'Evaluating threat signals\u2026',
-    'Almost done\u2026',
-  ];
-
   // AI verdict config
   const AI_VERDICTS = {
     Ok:      { cls: 'gsi-ai-verdict-ok',      label: 'Ok' },
     Caution: { cls: 'gsi-ai-verdict-caution',  label: 'Caution' },
     Reject:  { cls: 'gsi-ai-verdict-reject',   label: 'Reject' },
   };
-
-  /**
-   * Create and populate the AI Analysis section in the accordion.
-   * Returns the container element (initially shows loading state).
-   * Call updateAiSection() when results arrive.
-   */
-  function createAiSection(aiStatus) {
-    const wrap = document.createElement('div');
-    wrap.classList.add('gsi-ai-section');
-
-    const header = document.createElement('div');
-    header.classList.add('gsi-col-header');
-    header.textContent = 'AI Analysis';
-    wrap.appendChild(header);
-
-    // Always show version + API status so the user has context
-    if (aiStatus) {
-      const compat = document.createElement('div');
-      compat.classList.add('gsi-ai-compat');
-
-      const chromeVer = aiStatus.chromeVersion;
-      const meetsMin = chromeVer && chromeVer >= AI_MIN_CHROME_VERSION;
-      const apiLabel = !aiStatus.hasApi ? 'not found' : (aiStatus.status || 'unknown');
-
-      compat.textContent = `Chrome ${chromeVer || '?'}`
-        + (meetsMin ? '' : ` (requires ${AI_MIN_CHROME_VERSION}+)`)
-        + ` · Prompt API: ${apiLabel}`;
-      compat.style.color = aiStatus.available ? '#5f6368' : '#c62828';
-      wrap.appendChild(compat);
-    }
-
-    const loading = document.createElement('div');
-    loading.classList.add('gsi-ai-loading');
-    loading.textContent = aiStatus && aiStatus.available ? 'Analyzing\u2026' : '';
-    wrap.appendChild(loading);
-
-    return wrap;
-  }
-
-  /**
-   * Update the AI section with analysis results.
-   */
-  function updateAiSection(sectionEl, result, bannerEl, onRetry) {
-    // Remove loading indicator
-    const loading = sectionEl.querySelector('.gsi-ai-loading');
-    if (loading) loading.remove();
-
-    // Remove any previous banner row from a prior attempt
-    if (bannerEl) {
-      const oldRow = bannerEl.querySelector('.gsi-ai-banner-row');
-      if (oldRow) oldRow.remove();
-    }
-
-    const failed = !result || result.timeout || result.parseError;
-
-    // Banner row: verdict pill + summary, or apology message on failure
-    if (bannerEl) {
-      const accordion = bannerEl.querySelector('.gsi-accordion');
-
-      const row = document.createElement('div');
-      row.classList.add('gsi-ai-banner-row');
-
-      if (failed) {
-        const msg = document.createElement('span');
-        msg.classList.add('gsi-ai-summary', 'gsi-ai-fail-text');
-        msg.textContent = result && result.timeout
-          ? 'AI analysis timed out. Sorry about that.'
-          : 'AI analysis was inconclusive. Sorry about that.';
-        row.appendChild(msg);
-      } else {
-        const verdictConfig = AI_VERDICTS[result.verdict] || AI_VERDICTS.Caution;
-
-        const pill = document.createElement('span');
-        pill.classList.add('gsi-ai-verdict', verdictConfig.cls);
-        pill.textContent = verdictConfig.label;
-        row.appendChild(pill);
-
-        if (result.summary) {
-          const summaryEl = document.createElement('span');
-          summaryEl.classList.add('gsi-ai-summary');
-          summaryEl.textContent = result.summary;
-          row.appendChild(summaryEl);
-        }
-      }
-
-      if (onRetry) {
-        const refreshBtn = document.createElement('button');
-        refreshBtn.classList.add('gsi-ai-refresh-btn');
-        refreshBtn.type = 'button';
-        refreshBtn.title = 'Re-run AI analysis';
-        refreshBtn.setAttribute('aria-label', 'Re-run AI analysis');
-        refreshBtn.textContent = '\u21BB';
-        refreshBtn.addEventListener('click', () => {
-          row.remove();
-          const oldReasons = sectionEl.querySelector('.gsi-ai-reasons');
-          if (oldReasons) oldReasons.remove();
-          const oldPill = sectionEl.querySelector('.gsi-ai-verdict');
-          if (oldPill) oldPill.remove();
-          const retryLoading = document.createElement('div');
-          retryLoading.classList.add('gsi-ai-loading');
-          retryLoading.textContent = 'Retrying\u2026';
-          sectionEl.appendChild(retryLoading);
-          onRetry();
-        });
-        row.appendChild(refreshBtn);
-      }
-
-      if (accordion) {
-        bannerEl.insertBefore(row, accordion);
-      } else {
-        bannerEl.appendChild(row);
-      }
-    }
-
-    if (failed) return;
-
-    // Accordion: verdict pill copy + full reasons list
-    const verdictConfig = AI_VERDICTS[result.verdict] || AI_VERDICTS.Caution;
-    const accordionPill = document.createElement('span');
-    accordionPill.classList.add('gsi-ai-verdict', verdictConfig.cls);
-    accordionPill.textContent = verdictConfig.label;
-    sectionEl.appendChild(accordionPill);
-
-    if (result.reasons && result.reasons.length > 0) {
-      const list = document.createElement('ul');
-      list.classList.add('gsi-ai-reasons');
-      for (const reason of result.reasons) {
-        const li = document.createElement('li');
-        li.classList.add('gsi-ai-reason-item');
-        li.textContent = reason;
-        list.appendChild(li);
-      }
-      sectionEl.appendChild(list);
-    }
-  }
 
   /**
    * Append AI diagnostic lines to the debug section.
@@ -962,11 +803,11 @@
     if (d.rawResponse != null) {
       // Truncate raw response for display
       const raw = String(d.rawResponse);
-      lines.push(`AI raw: ${raw.length > 500 ? raw.substring(0, 500) + '…' : raw}`);
+      lines.push(`AI raw: ${raw.length > 500 ? raw.substring(0, 500) + '\u2026' : raw}`);
     }
     if (d.userPrompt != null) {
       const prompt = String(d.userPrompt);
-      lines.push(`AI prompt (${prompt.length} chars): ${prompt.length > 300 ? prompt.substring(0, 300) + '…' : prompt}`);
+      lines.push(`AI prompt (${prompt.length} chars): ${prompt.length > 300 ? prompt.substring(0, 300) + '\u2026' : prompt}`);
     }
     return lines;
   }
@@ -997,6 +838,7 @@
     // Strategy 1: Find the avatar mask <img> with data-hovercard-id matching the sender.
     // Must target img.ajn specifically — other elements like .yP spans also carry this attribute.
     const hovercardEl = document.querySelector(`img.ajn[data-hovercard-id="${CSS.escape(envelopeEmail)}"]`);
+
     if (hovercardEl) {
       debug.dataName = hovercardEl.getAttribute('data-name') || null;
       debug.hovercardFound = true;
@@ -1049,216 +891,186 @@
     const banner = document.createElement('div');
     banner.id = 'gsi-banner';
 
-    // --- Top row: logo + domain + badge ---
-    const topRow = document.createElement('div');
-    topRow.classList.add('gsi-banner-top');
+    // --- Main strip row ---
+    const stripRow = document.createElement('div');
+    stripRow.classList.add('gsi-strip-row');
 
-    const sourceBadge = document.createElement('span');
-    sourceBadge.classList.add('gsi-source-badge');
-    sourceBadge.style.display = 'none';
-
-    // Shared state to coordinate async logo resolution and security verdict.
-    // If logo resolves to unknown (no BIMI, no favicon), verdict caps at caution.
+    // Shared state for async logo/security coordination (unchanged logic)
     const bannerState = { resolvedLogoSource: null, authVerdict: null };
-    let summaryElRef = null;
 
+    // Logo source text element (in details panel, created later but referenced in callback)
+    let srcTextEl = null;
+
+    // Logo (24x24)
     const logo = createLogoImg(info, (sourceKey) => {
-      updateBadge(sourceBadge, sourceKey);
       bannerState.resolvedLogoSource = sourceKey;
-      // No recognizable logo → override trusted verdict to caution
+      if (srcTextEl) {
+        srcTextEl.textContent = SOURCE_DETAIL_LABELS[sourceKey] || sourceKey;
+      }
       if (sourceKey === SOURCE_UNKNOWN && bannerState.authVerdict === 'trusted') {
-        if (summaryElRef) setVerdict(summaryElRef, 'caution', bannerBadge);
+        updateVerdictPill(verdictPill, 'caution');
+        updateGeminiColor(geminiIcon, 'caution');
       }
     });
-    topRow.appendChild(logo);
+    stripRow.appendChild(logo);
 
-    // Inline verdict badge (between logo and domain, hidden until verdict resolves)
-    const bannerBadge = document.createElement('span');
-    bannerBadge.classList.add('gsi-banner-verdict');
-    bannerBadge.style.display = 'none';
-    const bannerBadgeIcon = document.createElement('span');
-    bannerBadgeIcon.classList.add('gsi-banner-verdict-icon');
-    bannerBadge.appendChild(bannerBadgeIcon);
-    topRow.appendChild(bannerBadge);
-
-    const textWrap = document.createElement('div');
-    textWrap.classList.add('gsi-banner-text');
-
+    // Domain
     const domainSpan = document.createElement('span');
-    domainSpan.classList.add('gsi-banner-domain');
+    domainSpan.classList.add('gsi-strip-domain');
     domainSpan.textContent = info.fullDomain;
-    textWrap.appendChild(domainSpan);
+    stripRow.appendChild(domainSpan);
 
+    // Root domain (if different)
     if (info.rootDomain !== info.fullDomain) {
       const rootSpan = document.createElement('span');
-      rootSpan.classList.add('gsi-banner-root');
+      rootSpan.classList.add('gsi-strip-root');
       rootSpan.textContent = `(${info.rootDomain})`;
-      textWrap.appendChild(rootSpan);
+      stripRow.appendChild(rootSpan);
     }
 
-    textWrap.appendChild(sourceBadge);
-
-    // Profile image — inserted after domain, as a small circular avatar
+    // Profile image (20x20, conditional)
     function tryAddProfileImage() {
       const result = extractProfileImageUrl(envelopeEmail);
       banner.__gsiProfileDebug = result.debug;
       if (result.url) {
-        // Remove previous attempts
-        const old = textWrap.querySelector('.gsi-profile-img');
+        const old = stripRow.querySelector('.gsi-profile-img');
         if (old) old.remove();
-        const oldName = textWrap.querySelector('.gsi-profile-name');
-        if (oldName) oldName.remove();
-
         const profileImg = document.createElement('img');
         profileImg.classList.add('gsi-profile-img');
         profileImg.src = result.url;
-        profileImg.width = 24;
-        profileImg.height = 24;
+        profileImg.width = 20;
+        profileImg.height = 20;
         profileImg.alt = result.debug.dataName || 'Sender profile';
         profileImg.onerror = () => profileImg.remove();
-
-        // Insert after domain span
-        const domainEl = textWrap.querySelector('.gsi-banner-domain');
-        const insertBefore = domainEl ? domainEl.nextSibling : null;
-        if (insertBefore) {
-          textWrap.insertBefore(profileImg, insertBefore);
+        // Insert after domain/root spans, before divider
+        const firstDivider = stripRow.querySelector('.gsi-strip-divider');
+        if (firstDivider) {
+          stripRow.insertBefore(profileImg, firstDivider);
         } else {
-          textWrap.appendChild(profileImg);
-        }
-
-        // Add sender name after profile image if available
-        if (result.debug.dataName) {
-          const nameSpan = document.createElement('span');
-          nameSpan.classList.add('gsi-profile-name');
-          nameSpan.textContent = result.debug.dataName;
-          // Insert right after the profile image
-          if (profileImg.nextSibling) {
-            textWrap.insertBefore(nameSpan, profileImg.nextSibling);
-          } else {
-            textWrap.appendChild(nameSpan);
-          }
+          stripRow.appendChild(profileImg);
         }
         return true;
       }
       return false;
     }
 
-    if (!tryAddProfileImage()) {
-      setTimeout(() => {
-        if (banner.isConnected) tryAddProfileImage();
-      }, 500);
-      setTimeout(() => {
-        if (banner.isConnected && !textWrap.querySelector('.gsi-profile-img')) tryAddProfileImage();
-      }, 1500);
-    }
+    // Divider
+    const div1 = document.createElement('span');
+    div1.classList.add('gsi-strip-divider');
+    div1.textContent = '|';
+    stripRow.appendChild(div1);
 
-    topRow.appendChild(textWrap);
+    // Security pills (loading state)
+    const spfPill = createPill('SPF', 'loading');
+    const dkimPill = createPill('DKIM', 'loading');
+    const dmarcPill = createPill('DMARC', 'loading');
+    stripRow.appendChild(spfPill);
+    stripRow.appendChild(dkimPill);
+    stripRow.appendChild(dmarcPill);
 
-    // Gemini AI indicator (top-right, shown once Prompt API is confirmed available)
-    const geminiIcon = document.createElement('span');
-    geminiIcon.classList.add('gsi-gemini-icon');
+    // Divider
+    const div2 = document.createElement('span');
+    div2.classList.add('gsi-strip-divider');
+    div2.textContent = '|';
+    stripRow.appendChild(div2);
+
+    // Verdict pill (loading state)
+    const verdictPill = createPill('Checking', 'loading', true);
+    stripRow.appendChild(verdictPill);
+
+    // Spacer
+    const spacer = document.createElement('div');
+    spacer.style.flex = '1';
+    stripRow.appendChild(spacer);
+
+    // Gemini sparkle (hidden until AI check confirms available)
+    const geminiIcon = createGeminiIcon();
     geminiIcon.style.display = 'none';
-    geminiIcon.title = 'AI analysis by Gemini Nano';
-    const svgNS = 'http://www.w3.org/2000/svg';
-    const svg = document.createElementNS(svgNS, 'svg');
-    svg.setAttribute('width', '20');
-    svg.setAttribute('height', '20');
-    svg.setAttribute('viewBox', '0 0 28 28');
-    svg.setAttribute('fill', 'none');
-    const path = document.createElementNS(svgNS, 'path');
-    path.setAttribute('d', 'M14 0C14 7.732 20.268 14 28 14C20.268 14 14 20.268 14 28C14 20.268 7.732 14 0 14C7.732 14 14 7.732 14 0Z');
-    path.setAttribute('fill', 'currentColor');
-    svg.appendChild(path);
-    geminiIcon.appendChild(svg);
-    topRow.appendChild(geminiIcon);
+    stripRow.appendChild(geminiIcon);
 
-    banner.appendChild(topRow);
+    // Expand arrow
+    const expandArrow = document.createElement('span');
+    expandArrow.classList.add('gsi-strip-expand');
+    expandArrow.textContent = '\u25BC';
+    stripRow.appendChild(expandArrow);
 
-    // --- Accordion: favicon details ---
-    if (info.favicons) {
-      const accordion = document.createElement('div');
-      accordion.classList.add('gsi-accordion');
+    banner.appendChild(stripRow);
 
-      const header = document.createElement('div');
-      header.classList.add('gsi-accordion-header');
-      const chevron = document.createElement('span');
-      chevron.classList.add('gsi-chevron');
-      chevron.textContent = '\u25B6';
-      header.appendChild(chevron);
-      header.appendChild(document.createTextNode(' Details'));
-
-      const content = document.createElement('div');
-      content.classList.add('gsi-accordion-content');
-
-      const table = document.createElement('div');
-      table.classList.add('gsi-details-table');
-
-      // Column 1: Favicons
-      const favCol = document.createElement('div');
-      favCol.classList.add('gsi-details-col');
-
-      const faviconHeader = document.createElement('div');
-      faviconHeader.classList.add('gsi-col-header');
-      faviconHeader.textContent = 'Favicons';
-      favCol.appendChild(faviconHeader);
-
-      const labels = { sub: 'subdomain', root: 'root', www: 'www' };
-      for (const [key, label] of Object.entries(labels)) {
-        const fav = info.favicons[key];
-        if (!fav) continue;
-
-        const row = document.createElement('div');
-        row.classList.add('gsi-detail-row');
-
-        const icon = createDetailFaviconImg(fav);
-        row.appendChild(icon);
-
-        const domainLabel = document.createElement('span');
-        domainLabel.classList.add('gsi-detail-label');
-        domainLabel.textContent = label;
-        row.appendChild(domainLabel);
-
-        const domainValue = document.createElement('span');
-        domainValue.classList.add('gsi-detail-domain');
-        domainValue.textContent = fav.domain;
-        row.appendChild(domainValue);
-
-        favCol.appendChild(row);
-      }
-
-      // Column 2: Security checks
-      const secCol = document.createElement('div');
-      secCol.classList.add('gsi-details-col');
-
-      // Column 3: Summary verdict
-      const summaryEl = document.createElement('div');
-      summaryEl.classList.add('gsi-summary', 'gsi-verdict-loading');
-      summaryElRef = summaryEl;
-      const summaryIcon = document.createElement('div');
-      summaryIcon.classList.add('gsi-summary-icon');
-      const summaryLabel = document.createElement('div');
-      summaryLabel.classList.add('gsi-summary-label');
-      summaryLabel.textContent = 'Checking\u2026';
-      summaryEl.appendChild(summaryIcon);
-      summaryEl.appendChild(summaryLabel);
-
-      createSecuritySection(secCol, summaryEl, info, envelopeEmail, bannerBadge, sourceBadge, bannerState);
-
-      table.appendChild(favCol);
-      table.appendChild(secCol);
-      table.appendChild(summaryEl);
-      content.appendChild(table);
-
-      header.addEventListener('click', () => {
-        const isOpen = content.style.display === 'block';
-        content.style.display = isOpen ? 'none' : 'block';
-        chevron.textContent = isOpen ? '\u25B6' : '\u25BC';
-      });
-
-      accordion.appendChild(header);
-      accordion.appendChild(content);
-      banner.appendChild(accordion);
+    // Profile image retry
+    if (!tryAddProfileImage()) {
+      setTimeout(() => { if (banner.isConnected) tryAddProfileImage(); }, 500);
+      setTimeout(() => { if (banner.isConnected && !stripRow.querySelector('.gsi-profile-img')) tryAddProfileImage(); }, 1500);
     }
+
+    // --- AI summary line (below strip, always visible) ---
+    const aiLine = document.createElement('div');
+    aiLine.classList.add('gsi-ai-line');
+    aiLine.style.display = 'none'; // hidden until AI availability confirmed
+
+    const aiSparkle = createSparkleSvg(14, '#9aa0a6');
+    aiLine.appendChild(aiSparkle);
+
+    const aiLineText = document.createElement('span');
+    aiLineText.classList.add('gsi-ai-line-text', 'gsi-ai-line-loading');
+    aiLineText.textContent = 'Analyzing\u2026';
+    aiLine.appendChild(aiLineText);
+
+    banner.appendChild(aiLine);
+
+    // --- Details panel (hidden by default) ---
+    const detailsPanel = document.createElement('div');
+    detailsPanel.classList.add('gsi-details-panel');
+
+    // Toggle via expand arrow
+    expandArrow.addEventListener('click', () => {
+      const isOpen = detailsPanel.style.display === 'block';
+      detailsPanel.style.display = isOpen ? 'none' : 'block';
+      expandArrow.textContent = isOpen ? '\u25BC' : '\u25B2';
+    });
+
+    // 1. Security details section
+    const secSection = document.createElement('div');
+    secSection.classList.add('gsi-details-section');
+    const secLabel = document.createElement('div');
+    secLabel.classList.add('gsi-details-label');
+    secLabel.textContent = 'Security';
+    secSection.appendChild(secLabel);
+    // Security detail rows populated by createSecuritySection callback
+    detailsPanel.appendChild(secSection);
+
+    // 2. Logo source section
+    const srcSection = document.createElement('div');
+    srcSection.classList.add('gsi-details-section');
+    const srcLabel = document.createElement('div');
+    srcLabel.classList.add('gsi-details-label');
+    srcLabel.textContent = 'Logo Source';
+    srcSection.appendChild(srcLabel);
+    const srcText = document.createElement('div');
+    srcText.classList.add('gsi-details-source');
+    srcText.textContent = 'Resolving\u2026';
+    srcSection.appendChild(srcText);
+    srcTextEl = srcText; // wire up to logo callback
+    detailsPanel.appendChild(srcSection);
+
+    // 3. AI analysis details (populated after AI result)
+    const aiDetailsSection = document.createElement('div');
+    aiDetailsSection.classList.add('gsi-details-section');
+    aiDetailsSection.style.display = 'none'; // hidden until AI result
+    detailsPanel.appendChild(aiDetailsSection);
+
+    // 4. Debug section (nested collapsible) — built by original sender / debug async block
+
+    banner.appendChild(detailsPanel);
+
+    // Wire up security section to update pills + populate details
+    createSecuritySection(
+      { spf: spfPill, dkim: dkimPill, dmarc: dmarcPill, verdict: verdictPill },
+      geminiIcon,
+      secSection,
+      info,
+      envelopeEmail,
+      bannerState
+    );
 
     // Insert before the subject line, but match the width of the email
     // body table below (.ii .a3s = message body, or the parent .gs container).
@@ -1281,43 +1093,9 @@
 
       if (!aiStatus.available) return;
 
-      // Show Gemini icon in gray while loading
+      // Show Gemini icon in strip and AI summary line
       geminiIcon.style.display = '';
-
-      // Cycling scan status text below the domain, where the verdict row will appear
-      const scanText = document.createElement('div');
-      scanText.classList.add('gsi-ai-scan-text');
-      scanText.textContent = AI_SCAN_MESSAGES[0];
-      const accordion = banner.querySelector('.gsi-accordion');
-      if (accordion) {
-        banner.insertBefore(scanText, accordion);
-      } else {
-        banner.appendChild(scanText);
-      }
-      let scanIdx = 0;
-      const scanInterval = setInterval(() => {
-        if (!banner.isConnected) { clearInterval(scanInterval); return; }
-        scanIdx = (scanIdx + 1) % AI_SCAN_MESSAGES.length;
-        scanText.textContent = AI_SCAN_MESSAGES[scanIdx];
-      }, 2500);
-
-      // Find accordion content to insert into
-      const accordionContent = banner.querySelector('.gsi-accordion-content');
-      if (!accordionContent) {
-        clearInterval(scanInterval);
-        scanText.remove();
-        return;
-      }
-
-      const aiSection = createAiSection(aiStatus);
-
-      // Insert before debug section if it exists, otherwise append
-      const debugWrap = accordionContent.querySelector('.gsi-debug-section');
-      if (debugWrap) {
-        accordionContent.insertBefore(aiSection, debugWrap);
-      } else {
-        accordionContent.appendChild(aiSection);
-      }
+      aiLine.style.display = '';
 
       const emailData = extractEmailData(envelopeEmail);
       const msgResult = getMessageId();
@@ -1350,19 +1128,105 @@
         }
       }
 
-      function applyResult(result) {
+      function applyAiResult(result) {
         // Reset gemini icon classes
         geminiIcon.classList.remove('gsi-gemini-ok', 'gsi-gemini-caution', 'gsi-gemini-reject', 'gsi-gemini-neutral');
 
-        if (result && result.parseError) {
+        const failed = !result || result.timeout || result.parseError;
+
+        if (failed) {
           geminiIcon.classList.add('gsi-gemini-neutral');
-        } else if (result && result.verdict) {
+          // Update AI line with failure message
+          aiLineText.classList.remove('gsi-ai-line-loading');
+          aiLineText.textContent = result && result.timeout
+            ? 'AI analysis timed out'
+            : 'AI analysis unavailable';
+
+          // Add retry button to AI line
+          const refreshBtn = document.createElement('button');
+          refreshBtn.classList.add('gsi-ai-refresh-btn');
+          refreshBtn.type = 'button';
+          refreshBtn.title = 'Re-run AI analysis';
+          refreshBtn.setAttribute('aria-label', 'Re-run AI analysis');
+          refreshBtn.textContent = '\u21BB';
+          refreshBtn.addEventListener('click', () => {
+            aiLineText.classList.add('gsi-ai-line-loading');
+            aiLineText.textContent = 'Retrying\u2026';
+            const oldBtn = aiLine.querySelector('.gsi-ai-refresh-btn');
+            if (oldBtn) oldBtn.remove();
+            // Clear previous AI details
+            aiDetailsSection.style.display = 'none';
+            while (aiDetailsSection.firstChild) aiDetailsSection.removeChild(aiDetailsSection.firstChild);
+            requestAiAnalysis(emailData, { skipCache: true }).then((retryResult) => {
+              applyAiResult(retryResult);
+            });
+          });
+          aiLine.appendChild(refreshBtn);
+        } else {
           const colorMap = { Ok: 'gsi-gemini-ok', Caution: 'gsi-gemini-caution', Reject: 'gsi-gemini-reject' };
           geminiIcon.classList.add(colorMap[result.verdict] || 'gsi-gemini-caution');
-        } else if (result && result.timeout) {
-          geminiIcon.classList.add('gsi-gemini-neutral');
-        } else {
-          geminiIcon.classList.add('gsi-gemini-neutral');
+
+          // Update AI line with verdict pill + summary
+          aiLineText.classList.remove('gsi-ai-line-loading');
+          const verdictConfig = AI_VERDICTS[result.verdict] || AI_VERDICTS.Caution;
+          const aiPill = document.createElement('span');
+          aiPill.classList.add('gsi-ai-verdict', verdictConfig.cls);
+          aiPill.textContent = verdictConfig.label;
+
+          // Replace loading text with pill + summary
+          aiLineText.textContent = '';
+          aiLineText.appendChild(aiPill);
+          if (result.summary) {
+            aiLineText.appendChild(document.createTextNode(' ' + result.summary));
+          } else if (result.reasons && result.reasons.length > 0) {
+            aiLineText.appendChild(document.createTextNode(' ' + result.reasons[0]));
+          } else if (result.verdict === 'Ok') {
+            aiLineText.appendChild(document.createTextNode(' No concerns detected'));
+          }
+
+          // Add retry button
+          const refreshBtn = document.createElement('button');
+          refreshBtn.classList.add('gsi-ai-refresh-btn');
+          refreshBtn.type = 'button';
+          refreshBtn.title = 'Re-run AI analysis';
+          refreshBtn.setAttribute('aria-label', 'Re-run AI analysis');
+          refreshBtn.textContent = '\u21BB';
+          refreshBtn.addEventListener('click', () => {
+            aiLineText.classList.add('gsi-ai-line-loading');
+            aiLineText.textContent = 'Retrying\u2026';
+            const oldBtn = aiLine.querySelector('.gsi-ai-refresh-btn');
+            if (oldBtn) oldBtn.remove();
+            aiDetailsSection.style.display = 'none';
+            while (aiDetailsSection.firstChild) aiDetailsSection.removeChild(aiDetailsSection.firstChild);
+            requestAiAnalysis(emailData, { skipCache: true }).then((retryResult) => {
+              applyAiResult(retryResult);
+            });
+          });
+          aiLine.appendChild(refreshBtn);
+
+          // Populate AI details section with full reasons
+          if (result.reasons && result.reasons.length > 0) {
+            aiDetailsSection.style.display = '';
+            const aiLabel = document.createElement('div');
+            aiLabel.classList.add('gsi-details-label');
+            aiLabel.textContent = 'AI Analysis';
+            aiDetailsSection.appendChild(aiLabel);
+
+            const detailPill = document.createElement('span');
+            detailPill.classList.add('gsi-ai-verdict', verdictConfig.cls);
+            detailPill.textContent = verdictConfig.label;
+            aiDetailsSection.appendChild(detailPill);
+
+            const list = document.createElement('ul');
+            list.classList.add('gsi-ai-reasons');
+            for (const reason of result.reasons) {
+              const li = document.createElement('li');
+              li.classList.add('gsi-ai-reason-item');
+              li.textContent = reason;
+              list.appendChild(li);
+            }
+            aiDetailsSection.appendChild(list);
+          }
         }
 
         if (result && result.debug) {
@@ -1370,19 +1234,9 @@
         }
       }
 
-      function handleRetry() {
-        requestAiAnalysis(emailData, { skipCache: true }).then((retryResult) => {
-          updateAiSection(aiSection, retryResult, banner, handleRetry);
-          applyResult(retryResult);
-        });
-      }
-
       const result = await requestAiAnalysis(emailData);
-      clearInterval(scanInterval);
-      scanText.remove();
       if (!banner.isConnected) return; // banner was removed while waiting
-      updateAiSection(aiSection, result, banner, handleRetry);
-      applyResult(result);
+      applyAiResult(result);
     })();
 
     // Detect original sender for Google Groups / mailing list emails
@@ -1401,36 +1255,15 @@
         if (ml) originalSender = ml.originalSender;
       }
 
-      // Find or create accordion content area for debug + original sender rows
-      let accordionContent = banner.querySelector('.gsi-accordion-content');
-      if (!accordionContent) {
-        const accordion = document.createElement('div');
-        accordion.classList.add('gsi-accordion');
-        const accHeader = document.createElement('div');
-        accHeader.classList.add('gsi-accordion-header');
-        const chevron = document.createElement('span');
-        chevron.classList.add('gsi-chevron');
-        chevron.textContent = '\u25B6';
-        accHeader.appendChild(chevron);
-        accHeader.appendChild(document.createTextNode(' Details'));
-        accordionContent = document.createElement('div');
-        accordionContent.classList.add('gsi-accordion-content');
-        accHeader.addEventListener('click', () => {
-          const isOpen = accordionContent.style.display === 'block';
-          accordionContent.style.display = isOpen ? 'none' : 'block';
-          chevron.textContent = isOpen ? '\u25B6' : '\u25BC';
-        });
-        accordion.appendChild(accHeader);
-        accordion.appendChild(accordionContent);
-        banner.appendChild(accordion);
-      }
+      // Find details panel for debug + original sender rows
+      let detailsPanelEl = banner.querySelector('.gsi-details-panel');
+      if (!detailsPanelEl) return; // should always exist in new layout
 
-      // DEBUG: collapsible section in accordion (collapsed by default)
+      // DEBUG: collapsible section in details panel (collapsed by default)
       const debugWrap = document.createElement('div');
       debugWrap.classList.add('gsi-debug-section');
-      debugWrap.style.cssText = 'margin-top:6px;border-top:1px solid #e8eaed;padding-top:4px';
       const debugHeader = document.createElement('div');
-      debugHeader.style.cssText = 'font-size:10px;color:#80868b;cursor:pointer;user-select:none';
+      debugHeader.classList.add('gsi-debug-header');
       const debugChevron = document.createElement('span');
       debugChevron.style.cssText = 'font-size:9px;display:inline-block;transition:transform 0.15s';
       debugChevron.textContent = '\u25B6';
@@ -1438,7 +1271,6 @@
       debugHeader.appendChild(document.createTextNode(' Debug'));
       const debugContent = document.createElement('div');
       debugContent.classList.add('gsi-debug-content');
-      debugContent.style.cssText = 'display:none;font-size:11px;color:#5f6368;margin-top:4px;padding:4px 8px;background:#fff3cd;border-radius:4px;font-family:monospace;word-break:break-all;white-space:pre-wrap';
       // Build debug lines
       const debugLines = [
         `envelope: ${envelopeEmail || '(none)'} | X-Original-Sender: ${originalSender || '(not found)'} | path: ${result.authData ? 'HTML' : 'raw'}`,
@@ -1509,77 +1341,65 @@
       });
       debugWrap.appendChild(debugHeader);
       debugWrap.appendChild(debugContent);
-      accordionContent.appendChild(debugWrap);
+      detailsPanelEl.appendChild(debugWrap);
 
       if (!originalSender || !envelopeEmail || originalSender === envelopeEmail) return;
 
       const origInfo = await requestSenderInfo(originalSender);
       if (!origInfo) return;
 
-      // Update banner top row with original sender info
-      const logoContainer = banner.querySelector('.gsi-banner-logos');
+      // Update strip row with original sender info
       const oldLogo = banner.querySelector('.gsi-logo');
-      const bannerText = banner.querySelector('.gsi-banner-text');
-      const oldBadge = bannerText?.querySelector('.gsi-source-badge');
-      if (oldLogo && bannerText) {
-        const newBadge = document.createElement('span');
-        newBadge.classList.add('gsi-source-badge');
-        newBadge.style.display = 'none';
-        const newLogo = createLogoImg(origInfo, (sourceKey) => updateBadge(newBadge, sourceKey));
+      const stripRowEl = banner.querySelector('.gsi-strip-row');
+      if (oldLogo && stripRowEl) {
+        const newLogo = createLogoImg(origInfo, (sourceKey) => {
+          if (srcTextEl) {
+            srcTextEl.textContent = SOURCE_DETAIL_LABELS[sourceKey] || sourceKey;
+          }
+        });
         oldLogo.replaceWith(newLogo);
-        if (oldBadge) oldBadge.replaceWith(newBadge);
-        else bannerText.appendChild(newBadge);
 
         // Update profile image to original sender's photo
-        const oldProfile = bannerText.querySelector('.gsi-profile-img');
-        const oldProfileName = bannerText.querySelector('.gsi-profile-name');
-        if (oldProfileName) oldProfileName.remove();
+        const oldProfile = stripRowEl.querySelector('.gsi-profile-img');
         const origProfileResult = extractProfileImageUrl(originalSender);
         if (origProfileResult.url) {
           const profileImg = document.createElement('img');
           profileImg.classList.add('gsi-profile-img');
           profileImg.src = origProfileResult.url;
-          profileImg.width = 24;
-          profileImg.height = 24;
+          profileImg.width = 20;
+          profileImg.height = 20;
           profileImg.alt = origProfileResult.debug?.dataName || 'Sender profile';
           profileImg.onerror = () => profileImg.remove();
           if (oldProfile) oldProfile.replaceWith(profileImg);
           else {
-            const domainEl = bannerText.querySelector('.gsi-banner-domain');
-            if (domainEl && domainEl.nextSibling) {
-              bannerText.insertBefore(profileImg, domainEl.nextSibling);
+            const firstDivider = stripRowEl.querySelector('.gsi-strip-divider');
+            if (firstDivider) {
+              stripRowEl.insertBefore(profileImg, firstDivider);
             } else {
-              bannerText.appendChild(profileImg);
-            }
-          }
-          // Add sender name after profile image if available
-          const dataName = origProfileResult.debug?.dataName;
-          if (dataName) {
-            const nameSpan = document.createElement('span');
-            nameSpan.classList.add('gsi-profile-name');
-            nameSpan.textContent = dataName;
-            if (profileImg.nextSibling) {
-              bannerText.insertBefore(nameSpan, profileImg.nextSibling);
-            } else {
-              bannerText.appendChild(nameSpan);
+              stripRowEl.appendChild(profileImg);
             }
           }
         } else if (oldProfile) {
           oldProfile.remove();
         }
 
-        const domainEl = bannerText.querySelector('.gsi-banner-domain');
+        const domainEl = stripRowEl.querySelector('.gsi-strip-domain');
         if (domainEl) domainEl.textContent = origInfo.fullDomain;
 
-        const rootEl = bannerText.querySelector('.gsi-banner-root');
+        const rootEl = stripRowEl.querySelector('.gsi-strip-root');
         if (origInfo.rootDomain !== origInfo.fullDomain) {
           if (rootEl) {
             rootEl.textContent = `(${origInfo.rootDomain})`;
           } else {
             const newRoot = document.createElement('span');
-            newRoot.classList.add('gsi-banner-root');
+            newRoot.classList.add('gsi-strip-root');
             newRoot.textContent = `(${origInfo.rootDomain})`;
-            bannerText.appendChild(newRoot);
+            // Insert after domain span
+            if (domainEl && domainEl.nextSibling) {
+              stripRowEl.insertBefore(newRoot, domainEl.nextSibling);
+            } else {
+              stripRowEl.appendChild(newRoot);
+            }
           }
         } else if (rootEl) {
           rootEl.remove();
@@ -1589,58 +1409,25 @@
         const viaBadge = document.createElement('span');
         viaBadge.classList.add('gsi-via-badge');
         viaBadge.textContent = `via ${groupDomain}`;
-        bannerText.appendChild(viaBadge);
-      }
-
-      // Add original sender row to accordion: favicons + security
-      const origSection = document.createElement('div');
-      origSection.style.cssText = 'margin-top:8px;padding-top:8px;border-top:1px solid #e8eaed';
-
-      const origLabel = document.createElement('div');
-      origLabel.classList.add('gsi-col-header');
-      origLabel.textContent = `Original Sender — ${origInfo.fullDomain}`;
-      origSection.appendChild(origLabel);
-
-      const origTable = document.createElement('div');
-      origTable.classList.add('gsi-details-table');
-
-      // Original sender favicons column
-      const origFavCol = document.createElement('div');
-      origFavCol.classList.add('gsi-details-col');
-      const origFavHeader = document.createElement('div');
-      origFavHeader.classList.add('gsi-col-header');
-      origFavHeader.textContent = 'Favicons';
-      origFavCol.appendChild(origFavHeader);
-
-      if (origInfo.favicons) {
-        const labels = { sub: 'subdomain', root: 'root', www: 'www' };
-        for (const [key, label] of Object.entries(labels)) {
-          const fav = origInfo.favicons[key];
-          if (!fav) continue;
-          const row = document.createElement('div');
-          row.classList.add('gsi-detail-row');
-          row.appendChild(createDetailFaviconImg(fav));
-          const dl = document.createElement('span');
-          dl.classList.add('gsi-detail-label');
-          dl.textContent = label;
-          row.appendChild(dl);
-          const dv = document.createElement('span');
-          dv.classList.add('gsi-detail-domain');
-          dv.textContent = fav.domain;
-          row.appendChild(dv);
-          origFavCol.appendChild(row);
+        // Insert before the first divider
+        const firstDivider = stripRowEl.querySelector('.gsi-strip-divider');
+        if (firstDivider) {
+          stripRowEl.insertBefore(viaBadge, firstDivider);
+        } else {
+          stripRowEl.appendChild(viaBadge);
         }
       }
 
-      // Original sender security column
-      const origSecCol = document.createElement('div');
-      origSecCol.classList.add('gsi-details-col');
-      const origSecHeader = document.createElement('div');
-      origSecHeader.classList.add('gsi-col-header');
-      origSecHeader.textContent = 'Security';
-      origSecCol.appendChild(origSecHeader);
+      // Add original sender section to details panel
+      const origSection = document.createElement('div');
+      origSection.classList.add('gsi-details-section');
 
-      // Parse auth results for original sender from the same headers
+      const origLabel = document.createElement('div');
+      origLabel.classList.add('gsi-details-label');
+      origLabel.textContent = `Original Sender \u2014 ${origInfo.fullDomain}`;
+      origSection.appendChild(origLabel);
+
+      // Original sender security info
       let origAuth = result.authData || null;
       if (!origAuth && result.headers) origAuth = parseAuthResults(result.headers);
 
@@ -1651,50 +1438,25 @@
       ];
       for (const check of checks) {
         const row = document.createElement('div');
-        row.classList.add('gsi-security-row');
-        const lbl = document.createElement('span');
-        lbl.classList.add('gsi-security-label');
-        lbl.textContent = check.label;
-        row.appendChild(lbl);
-        const res = document.createElement('span');
-        res.classList.add('gsi-security-result');
+        row.classList.add('gsi-details-row');
         const value = origAuth?.[check.key];
-        if (value) {
-          res.textContent = value;
-          if (value === 'pass') res.classList.add('gsi-result-pass');
-          else if (value === 'fail' || value === 'softfail') res.classList.add('gsi-result-fail');
-          else res.classList.add('gsi-result-neutral');
-        } else {
-          res.textContent = 'n/a';
-          res.classList.add('gsi-result-neutral');
-        }
-        row.appendChild(res);
-        origSecCol.appendChild(row);
+        row.textContent = `${check.label}: ${value || 'n/a'}`;
+        origSection.appendChild(row);
       }
 
       // BIMI for original sender
-      const bimiRow = document.createElement('div');
-      bimiRow.classList.add('gsi-security-row');
-      const bimiLbl = document.createElement('span');
-      bimiLbl.classList.add('gsi-security-label');
-      bimiLbl.textContent = 'BIMI';
-      bimiRow.appendChild(bimiLbl);
-      const bimiRes = document.createElement('span');
-      bimiRes.classList.add('gsi-security-result');
-      if (origInfo.logoSource === 'bimi') {
-        bimiRes.textContent = 'pass';
-        bimiRes.classList.add('gsi-result-pass');
-      } else {
-        bimiRes.textContent = 'none';
-        bimiRes.classList.add('gsi-result-neutral');
-      }
-      bimiRow.appendChild(bimiRes);
-      origSecCol.appendChild(bimiRow);
+      const bRow = document.createElement('div');
+      bRow.classList.add('gsi-details-row');
+      bRow.textContent = `BIMI: ${origInfo.logoSource === 'bimi' ? 'pass (DNS)' : 'none'}`;
+      origSection.appendChild(bRow);
 
-      origTable.appendChild(origFavCol);
-      origTable.appendChild(origSecCol);
-      origSection.appendChild(origTable);
-      accordionContent.appendChild(origSection);
+      // Insert before debug section
+      const existingDebug = detailsPanelEl.querySelector('.gsi-debug-section');
+      if (existingDebug) {
+        detailsPanelEl.insertBefore(origSection, existingDebug);
+      } else {
+        detailsPanelEl.appendChild(origSection);
+      }
     })();
   }
 
