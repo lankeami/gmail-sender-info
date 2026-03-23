@@ -76,73 +76,59 @@ When creating or modifying UI components (badges, banners, tooltips, icons), doc
 2. **Verdict/state mapping** — Which visual states exist (colors, visibility, text).
 3. **Data flow** — What triggers the element to update (e.g. auth results, logo load).
 
-### Banner Layout (email view)
+### Banner Layout (email view) — Compact Strip
 
-The banner (`#gsi-banner`) top row contains, in order:
+The banner (`#gsi-banner`) is a compact horizontal strip with three sections stacked vertically:
 
-| Element | Class | Description |
-|---------|-------|-------------|
-| Logo | `.gsi-logo` | 40×40 sender logo from BIMI/favicon chain (rounded square) |
-| Verdict badge | `.gsi-banner-verdict` | 18×18 SVG icon (caution triangle or danger circle). Hidden when trusted. |
-| Domain text | `.gsi-banner-text` | Full domain, profile image, root domain (if different), source badge, and via badge |
-| Profile image | `.gsi-profile-img` | 24×24 circular Gmail profile photo inline after domain (conditional — only real photos) |
-| Source badge | `.gsi-source-badge` | Context-dependent text next to domain (see below) |
-
-**Profile image detection:** `extractProfileImageUrl()` finds Gmail's avatar mask element (`img.ajn[data-hovercard-id]`) and checks if its `src` is a `googleusercontent.com` URL (real photo). Gmail lazy-loads the avatar `src` after initial render, so the banner retries at 500ms and 1500ms if the first attempt finds only the mask placeholder. Default avatars (colored background, no photo) are skipped. On load failure, `onerror` removes the element silently.
-
-### Source Badge Behavior
-
-The source badge (`.gsi-source-badge`) changes based on logo source and auth results:
-
-| Logo Source | Auth Result | Display |
-|-------------|-------------|---------|
-| BIMI | All pass | Hidden |
-| BIMI | Any fail/softfail | Failure text, e.g. "SPF: softfail" — colored by verdict (orange for caution, red for dangerous) |
-| Favicon | Any | Hidden |
-| Unknown | Any | "unknown" in red |
-
-Verdict-colored classes: `.gsi-source-verdict-caution` (orange `#e65100`), `.gsi-source-verdict-dangerous` (red `#c62828`).
-
-### Verdict Badge (inline)
-
-The inline verdict badge (`.gsi-banner-verdict`) in the top row mirrors the accordion summary verdict:
-
-| Verdict | Class | Display |
-|---------|-------|---------|
-| Trusted | — | Hidden (`display: none`) |
-| Caution | `.gsi-banner-verdict-caution` | 18×18 amber triangle, orange background |
-| Dangerous | `.gsi-banner-verdict-dangerous` | 18×18 red circle with X, red background |
-
-**Logo-source override:** If the logo chain falls through to caution.svg (source = unknown), the verdict is capped at caution even if SPF/DKIM/DMARC all pass. This is coordinated via a shared `bannerState` object between the async logo resolution and security check — whichever completes second applies the override.
-
-### AI Analysis Section
-
-Section inside the details accordion (between the details table and the debug section). Uses Chrome's built-in Prompt API (Gemini Nano, Chrome 138+) for on-device spam/phishing scoring.
+#### 1. Main Strip (`.gsi-strip-row`)
 
 | Element | Class | Description |
 |---------|-------|-------------|
-| Section wrapper | `.gsi-ai-section` | Container with top border separator |
-| Header | `.gsi-col-header` | "AI Analysis" label |
-| Loading state | `.gsi-ai-loading` | "Analyzing..." italic text |
-| Verdict pill | `.gsi-ai-verdict` | Colored badge: Ok (green), Caution (orange), Reject (red) |
-| Reasons list | `.gsi-ai-reasons` | Bulleted list of AI-identified concerns |
+| Logo | `.gsi-logo` | 24×24 sender logo from BIMI/favicon chain |
+| Domain | `.gsi-strip-domain` | 13px bold domain text |
+| Root domain | `.gsi-strip-root` | 11px grey `(rootDomain)` shown if different from fullDomain |
+| Profile image | `.gsi-profile-img` | 20×20 circular Gmail avatar (conditional — only real photos). Retries at 500ms/1500ms |
+| Via badge | `.gsi-via-badge` | "via domain" for mailing list emails |
+| Divider | `.gsi-strip-divider` | `\|` visual separator |
+| SPF pill | `.gsi-pill` | Pass (green) / fail (red) / loading (grey) |
+| DKIM pill | `.gsi-pill` | Same color scheme |
+| DMARC pill | `.gsi-pill` | Same color scheme |
+| Verdict pill | `.gsi-pill .gsi-pill-verdict` | Trusted (green), Caution (orange), Dangerous (red) |
+| Gemini sparkle | `.gsi-gemini-icon` | 24×24 circle, color matches verdict |
+| Expand arrow | `.gsi-strip-expand` | `▼`/`▲` toggles details panel |
 
-**Verdict classes:** `.gsi-ai-verdict-ok` (green `#1b5e20`), `.gsi-ai-verdict-caution` (orange `#e65100`), `.gsi-ai-verdict-reject` (red `#c62828`).
+**Security pill states:** `.gsi-pill-pass` (green), `.gsi-pill-fail` (red), `.gsi-pill-loading` (grey). Show ✓/✗ with label text.
 
-**Data flow:** On banner insert → check AI availability → extract email data from DOM (display name, subject, body text, links) → send to background → background prompts Gemini Nano → update section with verdict + reasons. If Prompt API is unavailable, the section is silently removed.
+**Verdict pill states:** `.gsi-pill-trusted` (green), `.gsi-pill-caution` (orange), `.gsi-pill-dangerous` (red).
+
+**Logo-source override:** If the logo chain falls through to caution.svg (source = unknown), the verdict is capped at caution even if SPF/DKIM/DMARC all pass. Coordinated via a shared `bannerState` object.
+
+#### 2. AI Summary Line (`.gsi-ai-line`)
+
+Always visible below the main strip (not inside the expandable details). Uses Chrome's built-in Prompt API (Gemini Nano, Chrome 138+).
+
+| State | Content |
+|-------|---------|
+| Loading | Grey sparkle + "Analyzing..." italic |
+| Result | Colored sparkle + verdict pill (`.gsi-ai-verdict`) + one-line reason text |
+| Error | Grey sparkle + "Analysis unavailable" + retry button (`.gsi-ai-refresh-btn`) |
+| Unavailable | Line removed entirely |
+
+**Data flow:** On banner insert → check AI availability → show loading → extract email data → send to background → Gemini Nano scores → update AI line with verdict + first reason. Full reasons list shown in details panel.
 
 **Criteria evaluated:**
 1. Sender display name vs email address mismatch (brand impersonation)
 2. Urgency/threat language in subject and body
 3. Link domain discrepancies (excluding link shorteners and subdomains)
 
-### Debug Section
+#### 3. Details Panel (`.gsi-details-panel`)
 
-Collapsible section inside the details accordion. Shows:
-- Envelope email, X-Original-Sender, fetch path (HTML vs raw)
-- Raw header lines: `Authentication-Results`, `Received-SPF`, `DKIM-Signature` (when raw headers available)
-- Parsed values fallback when only HTML path data is available
-- BIMI DNS status
+Hidden by default, toggled by expand arrow. Single-column stacked layout:
+
+1. **Security** (`.gsi-details-section`) — Full SPF/DKIM/DMARC/BIMI result values
+2. **Logo Source** (`.gsi-details-source`) — Which source resolved (BIMI, favicon, unknown)
+3. **AI Analysis** — Full bulleted reasons list (`.gsi-ai-reasons` / `.gsi-ai-reason-item`)
+4. **Debug** (`.gsi-debug-section`) — Nested collapsible with envelope email, headers, BIMI DNS status
 
 ## Development
 

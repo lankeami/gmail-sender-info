@@ -172,31 +172,6 @@
     }
   }
 
-  /**
-   * Create a favicon <img> for the detail accordion.
-   * Chain: Google URL (if 200) → direct /favicon.ico → caution SVG.
-   */
-  function createDetailFaviconImg(faviconInfo) {
-    const img = document.createElement('img');
-    img.classList.add('gsi-detail-icon');
-    img.width = 16;
-    img.height = 16;
-
-    const chain = [];
-    if (faviconInfo.googleUrl) chain.push(faviconInfo.googleUrl);
-    chain.push(faviconInfo.directUrl);
-    chain.push(CAUTION_URL);
-
-    let idx = 0;
-    img.onerror = () => {
-      idx++;
-      if (idx < chain.length) {
-        img.src = chain[idx];
-      }
-    };
-    img.src = chain[0];
-    return img;
-  }
 
   // --- Email security header checks ---
 
