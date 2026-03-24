@@ -330,8 +330,8 @@
   }
 
   /**
-   * Parse To, Cc, and Delivered-To from raw email headers.
-   * Returns { to, cc, deliveredTo } with raw header values.
+   * Parse To, Cc, Bcc, Delivered-To, and mailing list headers from raw email headers.
+   * Returns { to, cc, bcc, deliveredTo, isMailingList } with raw header values.
    */
   function parseRecipientHeaders(headerText) {
     const unfolded = headerText.replace(/\r?\n[ \t]+/g, ' ');
@@ -343,8 +343,12 @@
         result.to = line.substring('to:'.length).trim();
       } else if (lower.startsWith('cc:')) {
         result.cc = line.substring('cc:'.length).trim();
+      } else if (lower.startsWith('bcc:')) {
+        result.bcc = line.substring('bcc:'.length).trim();
       } else if (lower.startsWith('delivered-to:')) {
         result.deliveredTo = line.substring('delivered-to:'.length).trim().toLowerCase();
+      } else if (lower.startsWith('list-id:') || lower.startsWith('x-google-group-id:') || lower.startsWith('mailing-list:')) {
+        result.isMailingList = true;
       }
     }
     return Object.keys(result).length > 0 ? result : null;
@@ -352,19 +356,31 @@
 
   /**
    * Determine if the current user was BCC'd on this email.
-   * Checks if the user's email appears in To or Cc headers.
+   * Priority: explicit Bcc header > mailing list detection > To/Cc absence heuristic.
    * @param {Object} recipientHeaders - from parseRecipientHeaders or authData
-   * @returns {'bcc'|'direct'|null} - bcc if not found in To/Cc, direct if found, null if unknown
+   * @returns {'bcc'|'direct'|null} - bcc if BCC'd, direct if in To/Cc, null if unknown
    */
   function detectBccStatus(recipientHeaders) {
     if (!recipientHeaders) return null;
     const userEmail = recipientHeaders.deliveredTo;
+
+    // 1. Explicit Bcc header — definitive signal
+    if (recipientHeaders.bcc) {
+      const bccLower = recipientHeaders.bcc.toLowerCase();
+      if (userEmail && bccLower.includes(userEmail)) return 'bcc';
+      // Bcc header present but doesn't contain user — still BCC'd if user not in To/Cc
+      // (Bcc header may be redacted to just the current user's entry)
+    }
+
+    // 2. Mailing list — email arrived via group expansion, not BCC
+    if (recipientHeaders.isMailingList) return 'direct';
+
     if (!userEmail) return null;
 
     const toCc = ((recipientHeaders.to || '') + ' ' + (recipientHeaders.cc || '')).toLowerCase();
     if (!toCc.trim()) return null;
 
-    // Check if user's email appears in To or Cc
+    // 3. Check if user's email appears in To or Cc
     if (toCc.includes(userEmail)) return 'direct';
     // Also check without +alias: user+tag@gmail.com → user@gmail.com
     const atIdx = userEmail.indexOf('@');
@@ -1191,7 +1207,9 @@
             recipientHeaders = {
               to: headerResult.authData.toHeader || '',
               cc: headerResult.authData.ccHeader || '',
+              bcc: headerResult.authData.bccHeader || '',
               deliveredTo: headerResult.authData.deliveredTo || '',
+              isMailingList: headerResult.authData.isMailingList || false,
             };
           } else if (headerResult.headers) {
             recipientHeaders = parseRecipientHeaders(headerResult.headers);

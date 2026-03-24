@@ -84,13 +84,18 @@ window.addEventListener('message', async (event) => {
       const origSenderMatch = stripped.match(/X-Original-Sender[:\s]+([^\s<]+@[^\s>]+)/i);
       if (origSenderMatch) authData.originalSender = origSenderMatch[1].toLowerCase().trim();
 
-      // Extract To, Cc, and Delivered-To for BCC detection
+      // Extract To, Cc, Bcc, Delivered-To, and mailing list headers for BCC detection
       const toMatch = stripped.match(/\bTo[:\s]+([^\n]+)/i);
       if (toMatch) authData.toHeader = toMatch[1].trim();
       const ccMatch = stripped.match(/\bCc[:\s]+([^\n]+)/i);
       if (ccMatch) authData.ccHeader = ccMatch[1].trim();
+      const bccMatch = stripped.match(/\bBcc[:\s]+([^\n]+)/i);
+      if (bccMatch) authData.bccHeader = bccMatch[1].trim();
       const deliveredToMatch = stripped.match(/Delivered-To[:\s]+([^\s<]+@[^\s>]+)/i);
       if (deliveredToMatch) authData.deliveredTo = deliveredToMatch[1].toLowerCase().trim();
+      if (/\b(List-Id|X-Google-Group-Id|Mailing-List)\s*:/i.test(stripped)) {
+        authData.isMailingList = true;
+      }
 
       // Extract raw header lines from the stripped HTML text
       // The full email headers are embedded in the HTML page
