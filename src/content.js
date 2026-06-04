@@ -1441,6 +1441,7 @@
           'Authentication-Results',
           'Received-SPF',
           'DKIM-Signature',
+          'Reply-To',
         ]);
         if (rawHeaders['Authentication-Results']) {
           for (const line of rawHeaders['Authentication-Results']) {
@@ -1454,6 +1455,11 @@
         }
         if (rawHeaders['DKIM-Signature']) {
           for (const line of rawHeaders['DKIM-Signature']) {
+            debugLines.push(line);
+          }
+        }
+        if (rawHeaders['Reply-To']) {
+          for (const line of rawHeaders['Reply-To']) {
             debugLines.push(line);
           }
         }
@@ -1471,6 +1477,20 @@
         }
       }
       debugLines.push(`BIMI: ${info.logoSource === 'bimi' ? 'pass (DNS)' : 'none'}`);
+
+      // Reply-To diagnostics
+      let replyToHeader = null;
+      if (result.headers) {
+        const rh = parseRecipientHeaders(result.headers);
+        if (rh) replyToHeader = rh.replyTo;
+      } else if (result.authData?.replyTo) {
+        replyToHeader = result.authData.replyTo;
+      }
+      const replyToMismatch = detectReplyToMismatch(replyToHeader, envelopeEmail);
+      debugLines.push('--- Reply-To ---');
+      debugLines.push(`From: ${envelopeEmail || '(none)'}`);
+      debugLines.push(`Reply-To: ${replyToHeader || '(not set)'}`);
+      debugLines.push(`Mismatch: ${replyToMismatch ? `YES — replies go to ${replyToMismatch.replyToDomain} instead of ${replyToMismatch.senderDomain}` : 'no'}`);
 
       // Profile image diagnostics
       const pd = banner.__gsiProfileDebug;
