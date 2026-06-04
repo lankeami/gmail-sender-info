@@ -1264,6 +1264,7 @@
               bcc: headerResult.authData.bccHeader || '',
               deliveredTo: headerResult.authData.deliveredTo || '',
               isMailingList: headerResult.authData.isMailingList || false,
+              replyTo: headerResult.authData.replyTo || '',
             };
           } else if (headerResult.headers) {
             recipientHeaders = parseRecipientHeaders(headerResult.headers);
