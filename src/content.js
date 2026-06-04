@@ -330,8 +330,8 @@
   }
 
   /**
-   * Parse To, Cc, and Delivered-To from raw email headers.
-   * Returns { to, cc, deliveredTo } with raw header values.
+   * Parse To, Cc, Bcc, Delivered-To, and mailing list headers from raw email headers.
+   * Returns { to, cc, bcc, deliveredTo, isMailingList } with raw header values.
    */
   function parseRecipientHeaders(headerText) {
     const unfolded = headerText.replace(/\r?\n[ \t]+/g, ' ');
@@ -343,8 +343,14 @@
         result.to = line.substring('to:'.length).trim();
       } else if (lower.startsWith('cc:')) {
         result.cc = line.substring('cc:'.length).trim();
+      } else if (lower.startsWith('bcc:')) {
+        result.bcc = line.substring('bcc:'.length).trim();
       } else if (lower.startsWith('delivered-to:')) {
         result.deliveredTo = line.substring('delivered-to:'.length).trim().toLowerCase();
+      } else if (lower.startsWith('reply-to:')) {
+        result.replyTo = line.substring('reply-to:'.length).trim();
+      } else if (lower.startsWith('list-id:') || lower.startsWith('x-google-group-id:') || lower.startsWith('mailing-list:')) {
+        result.isMailingList = true;
       }
     }
     return Object.keys(result).length > 0 ? result : null;
@@ -352,19 +358,31 @@
 
   /**
    * Determine if the current user was BCC'd on this email.
-   * Checks if the user's email appears in To or Cc headers.
+   * Priority: explicit Bcc header > mailing list detection > To/Cc absence heuristic.
    * @param {Object} recipientHeaders - from parseRecipientHeaders or authData
-   * @returns {'bcc'|'direct'|null} - bcc if not found in To/Cc, direct if found, null if unknown
+   * @returns {'bcc'|'direct'|null} - bcc if BCC'd, direct if in To/Cc, null if unknown
    */
   function detectBccStatus(recipientHeaders) {
     if (!recipientHeaders) return null;
     const userEmail = recipientHeaders.deliveredTo;
+
+    // 1. Explicit Bcc header — definitive signal
+    if (recipientHeaders.bcc) {
+      const bccLower = recipientHeaders.bcc.toLowerCase();
+      if (userEmail && bccLower.includes(userEmail)) return 'bcc';
+      // Bcc header present but doesn't contain user — still BCC'd if user not in To/Cc
+      // (Bcc header may be redacted to just the current user's entry)
+    }
+
+    // 2. Mailing list — email arrived via group expansion, not BCC
+    if (recipientHeaders.isMailingList) return 'direct';
+
     if (!userEmail) return null;
 
     const toCc = ((recipientHeaders.to || '') + ' ' + (recipientHeaders.cc || '')).toLowerCase();
     if (!toCc.trim()) return null;
 
-    // Check if user's email appears in To or Cc
+    // 3. Check if user's email appears in To or Cc
     if (toCc.includes(userEmail)) return 'direct';
     // Also check without +alias: user+tag@gmail.com → user@gmail.com
     const atIdx = userEmail.indexOf('@');
@@ -401,6 +419,51 @@
       }
     }
     return result;
+  }
+
+  // --- Root domain extraction (mirrors background.js) ---
+
+  const MULTI_PART_TLDS = new Set([
+    'co.uk', 'org.uk', 'ac.uk', 'gov.uk', 'me.uk', 'net.uk',
+    'com.au', 'net.au', 'org.au', 'edu.au', 'gov.au',
+    'co.nz', 'net.nz', 'org.nz',
+    'co.in', 'net.in', 'org.in', 'gen.in', 'firm.in', 'ind.in',
+    'co.za', 'org.za', 'web.za',
+    'co.jp', 'or.jp', 'ne.jp', 'ac.jp',
+    'com.br', 'net.br', 'org.br',
+    'com.mx', 'org.mx', 'net.mx',
+    'com.cn', 'net.cn', 'org.cn',
+    'co.kr', 'or.kr', 'ne.kr',
+    'com.sg', 'org.sg', 'net.sg',
+    'com.hk', 'org.hk', 'net.hk',
+    'co.il', 'org.il', 'net.il',
+    'com.tw', 'org.tw', 'net.tw',
+    'com.ar', 'org.ar', 'net.ar',
+    'co.th', 'or.th', 'in.th',
+    'com.tr', 'org.tr', 'net.tr',
+  ]);
+
+  function getRootDomain(domain) {
+    const parts = domain.toLowerCase().split('.');
+    if (parts.length <= 2) return domain.toLowerCase();
+    const lastTwo = parts.slice(-2).join('.');
+    if (MULTI_PART_TLDS.has(lastTwo)) return parts.slice(-3).join('.');
+    return parts.slice(-2).join('.');
+  }
+
+  /**
+   * Detect Reply-To domain mismatch against the sender domain.
+   * Returns { replyToEmail, replyToDomain, senderDomain } if mismatched, or null.
+   */
+  function detectReplyToMismatch(replyTo, senderEmail) {
+    if (!replyTo || !senderEmail) return null;
+    const replyToMatch = replyTo.match(/<([^>]+)>/) || [null, replyTo];
+    const replyToEmail = (replyToMatch[1] || '').toLowerCase().trim();
+    if (!replyToEmail || !replyToEmail.includes('@')) return null;
+    const replyToDomain = getRootDomain(replyToEmail.split('@')[1]);
+    const senderDomain = getRootDomain(senderEmail.split('@')[1]);
+    if (replyToDomain === senderDomain) return null;
+    return { replyToEmail, replyToDomain, senderDomain };
   }
 
   // --- Verdict logic ---
@@ -996,6 +1059,13 @@
     emptyBodyPill.style.display = 'none';
     stripRow.appendChild(emptyBodyPill);
 
+    const replyToPill = document.createElement('span');
+    replyToPill.classList.add('gsi-pill', 'gsi-pill-fail');
+    replyToPill.textContent = 'REPLY-TO ✗';
+    replyToPill.title = 'Reply-To domain differs from sender domain';
+    replyToPill.style.display = 'none';
+    stripRow.appendChild(replyToPill);
+
     // Spacer
     const spacer = document.createElement('div');
     spacer.style.flex = '1';
@@ -1191,7 +1261,10 @@
             recipientHeaders = {
               to: headerResult.authData.toHeader || '',
               cc: headerResult.authData.ccHeader || '',
+              bcc: headerResult.authData.bccHeader || '',
               deliveredTo: headerResult.authData.deliveredTo || '',
+              isMailingList: headerResult.authData.isMailingList || false,
+              replyTo: headerResult.authData.replyTo || '',
             };
           } else if (headerResult.headers) {
             recipientHeaders = parseRecipientHeaders(headerResult.headers);
@@ -1202,6 +1275,15 @@
             emailData.recipientStatus = 'bcc';
           } else if (bccStatus === 'direct') {
             emailData.recipientStatus = 'direct';
+          }
+
+          // Reply-To mismatch detection
+          const replyToHeader = recipientHeaders?.replyTo;
+          const replyToMismatch = detectReplyToMismatch(replyToHeader, envelopeEmail);
+          if (replyToMismatch) {
+            replyToPill.style.display = '';
+            replyToPill.title = `Replies go to ${replyToMismatch.replyToEmail} (${replyToMismatch.replyToDomain}) instead of sender (${replyToMismatch.senderDomain})`;
+            emailData.replyToMismatch = replyToMismatch;
           }
         }
       }
@@ -1360,6 +1442,7 @@
           'Authentication-Results',
           'Received-SPF',
           'DKIM-Signature',
+          'Reply-To',
         ]);
         if (rawHeaders['Authentication-Results']) {
           for (const line of rawHeaders['Authentication-Results']) {
@@ -1373,6 +1456,11 @@
         }
         if (rawHeaders['DKIM-Signature']) {
           for (const line of rawHeaders['DKIM-Signature']) {
+            debugLines.push(line);
+          }
+        }
+        if (rawHeaders['Reply-To']) {
+          for (const line of rawHeaders['Reply-To']) {
             debugLines.push(line);
           }
         }
@@ -1390,6 +1478,20 @@
         }
       }
       debugLines.push(`BIMI: ${info.logoSource === 'bimi' ? 'pass (DNS)' : 'none'}`);
+
+      // Reply-To diagnostics
+      let replyToHeader = null;
+      if (result.headers) {
+        const rh = parseRecipientHeaders(result.headers);
+        if (rh) replyToHeader = rh.replyTo;
+      } else if (result.authData?.replyTo) {
+        replyToHeader = result.authData.replyTo;
+      }
+      const replyToMismatch = detectReplyToMismatch(replyToHeader, envelopeEmail);
+      debugLines.push('--- Reply-To ---');
+      debugLines.push(`From: ${envelopeEmail || '(none)'}`);
+      debugLines.push(`Reply-To: ${replyToHeader || '(not set)'}`);
+      debugLines.push(`Mismatch: ${replyToMismatch ? `YES — replies go to ${replyToMismatch.replyToDomain} instead of ${replyToMismatch.senderDomain}` : 'no'}`);
 
       // Profile image diagnostics
       const pd = banner.__gsiProfileDebug;

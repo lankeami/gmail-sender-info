@@ -38,7 +38,7 @@ gmail-sender-info/
 
 **Background → Content:** `{ available: true|false }`
 
-**Content → Background:** `{ action: 'analyzeEmail', data: { displayName, senderEmail, subject, bodyText, links, isEmptyBody, recipientStatus } }`
+**Content → Background:** `{ action: 'analyzeEmail', data: { displayName, senderEmail, subject, bodyText, links, isEmptyBody, recipientStatus, replyToMismatch } }`
 
 **Background → Content:** `{ verdict: 'Ok'|'Caution'|'Reject', reasons: [...] }` or `{ unavailable: true }`
 
@@ -96,6 +96,7 @@ The banner (`#gsi-banner`) is a compact horizontal strip with three sections sta
 | Verdict pill | `.gsi-pill .gsi-pill-verdict` | Trusted (green), Caution (orange), Dangerous (red) |
 | BCC pill | `.gsi-pill .gsi-pill-warn` | Orange warning, shown when user is BCC'd (hidden by default) |
 | Empty pill | `.gsi-pill .gsi-pill-warn` | Orange warning, shown when email body is empty/near-empty (hidden by default) |
+| Reply-To pill | `.gsi-pill .gsi-pill-fail` | Red warning, shown when Reply-To domain differs from sender domain (hidden by default) |
 | Gemini sparkle | `.gsi-gemini-icon` | 24×24 circle, color matches verdict |
 | Expand arrow | `.gsi-strip-expand` | `▼`/`▲` toggles details panel |
 
@@ -103,11 +104,13 @@ The banner (`#gsi-banner`) is a compact horizontal strip with three sections sta
 
 **Verdict pill states:** `.gsi-pill-trusted` (green), `.gsi-pill-caution` (orange), `.gsi-pill-dangerous` (red).
 
-**Warning pill states:** `.gsi-pill-warn` (orange). Shown conditionally for BCC recipient and empty body detection.
+**Warning pill states:** `.gsi-pill-warn` (orange). Shown conditionally for BCC recipient and empty body detection. `.gsi-pill-fail` (red) used for Reply-To mismatch.
 
 **BCC detection:** Compares user's email (from `Delivered-To` header) against `To` and `Cc` headers. If absent from both, user was BCC'd. Detected via `parseRecipientHeaders()` / `detectBccStatus()` in content.js.
 
 **Empty body detection:** Flagged when `bodyText.trim().length < 10` in `extractEmailData()`.
+
+**Reply-To mismatch detection:** Compares Reply-To header domain (root) against sender From domain (root). If different, shows red pill. Detected via `parseRecipientHeaders()` / `detectReplyToMismatch()` in content.js. Also fed to AI analysis as a high-severity signal.
 
 **Logo-source override:** If the logo chain falls through to caution.svg (source = unknown), the verdict is capped at caution even if SPF/DKIM/DMARC all pass. Coordinated via a shared `bannerState` object.
 
@@ -130,6 +133,7 @@ Always visible below the main strip (not inside the expandable details). Uses Ch
 3. Link domain discrepancies (excluding link shorteners and subdomains)
 4. BCC recipient status (escalates when combined with other signals)
 5. Empty body detection (suspicious from unknown senders)
+6. Reply-To domain mismatch (replies routed to different domain than sender)
 
 #### 3. Details Panel (`.gsi-details-panel`)
 

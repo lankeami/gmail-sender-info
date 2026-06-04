@@ -223,6 +223,7 @@ Given the email data below, evaluate these criteria:
 3. LINK DISCREPANCIES: Do any links point to domains different from the sender's domain? Note: link shorteners (bit.ly, t.co, goo.gl, tinyurl.com, etc.) and subdomained links (e.g., sender.example.com linking to example.com) are generally acceptable and should NOT be flagged. Personal emails often share links to various sites — this is normal and should NOT be flagged unless the links appear to mimic login pages or financial sites.
 4. BCC RECIPIENT: If "Recipient: BCC" is present, the recipient was blind-copied — they are not in the To or Cc fields. BCC from an unknown sender with no body or a generic subject is highly suspicious (likely spam or phishing probe). BCC alone is not dangerous (newsletters, internal forwards), but combined with other signals (empty body, unknown sender, urgency) it should escalate the verdict.
 5. EMPTY BODY: If "Body: (empty)" is noted, the email has no meaningful content. An empty or near-empty body from an unknown sender is suspicious — legitimate emails almost always contain content. Combined with BCC, this is a strong spam/phishing indicator.
+6. REPLY-TO MISMATCH: If "Reply-To mismatch" data is present, the Reply-To header routes replies to a different domain than the sender's From address. This is the #1 phishing technique — the From address looks legitimate but replies go to an attacker-controlled mailbox. This is a HIGH severity signal that should significantly escalate the verdict toward Caution or Reject, especially combined with urgency language, link discrepancies, or sender mismatch.
 
 AUTHENTICATION CONTEXT: The email data may include SPF, DKIM, and DMARC results. When all three pass, the sender is cryptographically verified — strongly favor "Ok" unless there are clear phishing indicators. However, passing authentication alone does NOT make a BCC'd empty-body email safe — spammers can have valid SPF/DKIM/DMARC. Weigh authentication together with behavioral signals (BCC status, empty body, unknown sender).
 
@@ -323,6 +324,9 @@ function buildAiUserPrompt(data) {
     lines.push('Body: (empty)');
   } else if (data.bodyText) {
     lines.push(`Body (excerpt):\n${sanitizeForPrompt(data.bodyText, 2000)}`);
+  }
+  if (data.replyToMismatch) {
+    lines.push(`Reply-To mismatch: replies go to ${sanitizeForPrompt(data.replyToMismatch.replyToEmail, 320)} (domain: ${sanitizeForPrompt(data.replyToMismatch.replyToDomain, 200)}) instead of sender domain ${sanitizeForPrompt(data.replyToMismatch.senderDomain, 200)}`);
   }
   if (data.auth) {
     lines.push(`Authentication: SPF=${data.auth.spf || 'unknown'}, DKIM=${data.auth.dkim || 'unknown'}, DMARC=${data.auth.dmarc || 'unknown'}`);
