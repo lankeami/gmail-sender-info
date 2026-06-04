@@ -347,6 +347,8 @@
         result.bcc = line.substring('bcc:'.length).trim();
       } else if (lower.startsWith('delivered-to:')) {
         result.deliveredTo = line.substring('delivered-to:'.length).trim().toLowerCase();
+      } else if (lower.startsWith('reply-to:')) {
+        result.replyTo = line.substring('reply-to:'.length).trim();
       } else if (lower.startsWith('list-id:') || lower.startsWith('x-google-group-id:') || lower.startsWith('mailing-list:')) {
         result.isMailingList = true;
       }
@@ -417,6 +419,51 @@
       }
     }
     return result;
+  }
+
+  // --- Root domain extraction (mirrors background.js) ---
+
+  const MULTI_PART_TLDS = new Set([
+    'co.uk', 'org.uk', 'ac.uk', 'gov.uk', 'me.uk', 'net.uk',
+    'com.au', 'net.au', 'org.au', 'edu.au', 'gov.au',
+    'co.nz', 'net.nz', 'org.nz',
+    'co.in', 'net.in', 'org.in', 'gen.in', 'firm.in', 'ind.in',
+    'co.za', 'org.za', 'web.za',
+    'co.jp', 'or.jp', 'ne.jp', 'ac.jp',
+    'com.br', 'net.br', 'org.br',
+    'com.mx', 'org.mx', 'net.mx',
+    'com.cn', 'net.cn', 'org.cn',
+    'co.kr', 'or.kr', 'ne.kr',
+    'com.sg', 'org.sg', 'net.sg',
+    'com.hk', 'org.hk', 'net.hk',
+    'co.il', 'org.il', 'net.il',
+    'com.tw', 'org.tw', 'net.tw',
+    'com.ar', 'org.ar', 'net.ar',
+    'co.th', 'or.th', 'in.th',
+    'com.tr', 'org.tr', 'net.tr',
+  ]);
+
+  function getRootDomain(domain) {
+    const parts = domain.toLowerCase().split('.');
+    if (parts.length <= 2) return domain.toLowerCase();
+    const lastTwo = parts.slice(-2).join('.');
+    if (MULTI_PART_TLDS.has(lastTwo)) return parts.slice(-3).join('.');
+    return parts.slice(-2).join('.');
+  }
+
+  /**
+   * Detect Reply-To domain mismatch against the sender domain.
+   * Returns { replyToEmail, replyToDomain, senderDomain } if mismatched, or null.
+   */
+  function detectReplyToMismatch(replyTo, senderEmail) {
+    if (!replyTo || !senderEmail) return null;
+    const replyToMatch = replyTo.match(/<([^>]+)>/) || [null, replyTo];
+    const replyToEmail = (replyToMatch[1] || '').toLowerCase().trim();
+    if (!replyToEmail || !replyToEmail.includes('@')) return null;
+    const replyToDomain = getRootDomain(replyToEmail.split('@')[1]);
+    const senderDomain = getRootDomain(senderEmail.split('@')[1]);
+    if (replyToDomain === senderDomain) return null;
+    return { replyToEmail, replyToDomain, senderDomain };
   }
 
   // --- Verdict logic ---
@@ -1012,6 +1059,13 @@
     emptyBodyPill.style.display = 'none';
     stripRow.appendChild(emptyBodyPill);
 
+    const replyToPill = document.createElement('span');
+    replyToPill.classList.add('gsi-pill', 'gsi-pill-fail');
+    replyToPill.textContent = 'REPLY-TO ✗';
+    replyToPill.title = 'Reply-To domain differs from sender domain';
+    replyToPill.style.display = 'none';
+    stripRow.appendChild(replyToPill);
+
     // Spacer
     const spacer = document.createElement('div');
     spacer.style.flex = '1';
@@ -1220,6 +1274,15 @@
             emailData.recipientStatus = 'bcc';
           } else if (bccStatus === 'direct') {
             emailData.recipientStatus = 'direct';
+          }
+
+          // Reply-To mismatch detection
+          const replyToHeader = recipientHeaders?.replyTo;
+          const replyToMismatch = detectReplyToMismatch(replyToHeader, envelopeEmail);
+          if (replyToMismatch) {
+            replyToPill.style.display = '';
+            replyToPill.title = `Replies go to ${replyToMismatch.replyToEmail} (${replyToMismatch.replyToDomain}) instead of sender (${replyToMismatch.senderDomain})`;
+            emailData.replyToMismatch = replyToMismatch;
           }
         }
       }
