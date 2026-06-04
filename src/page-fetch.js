@@ -93,7 +93,7 @@ window.addEventListener('message', async (event) => {
       if (bccMatch) authData.bccHeader = bccMatch[1].trim();
       const deliveredToMatch = stripped.match(/Delivered-To[:\s]+([^\s<]+@[^\s>]+)/i);
       if (deliveredToMatch) authData.deliveredTo = deliveredToMatch[1].toLowerCase().trim();
-      const replyToMatch = stripped.match(/\bReply-To[:\s]+([^\n]+)/i);
+      const replyToMatch = stripped.match(/\bReply-To\s*:\s*([^\n]*@[^\n]*)/i);
       if (replyToMatch) authData.replyTo = replyToMatch[1].trim();
       if (/\b(List-Id|X-Google-Group-Id|Mailing-List)\s*:/i.test(stripped)) {
         authData.isMailingList = true;
