@@ -125,6 +125,10 @@ async function checkIsGlobe(domain) {
 }
 
 function detectHomograph(domain) {
+  if (domain.includes('xn--')) {
+    return { isHomograph: true, scripts: ['Punycode'] };
+  }
+
   const ascii = /^[a-z0-9.-]+$/;
   if (ascii.test(domain)) return { isHomograph: false };
 
@@ -134,10 +138,6 @@ function detectHomograph(domain) {
 
   if (hasLatin && (hasCyrillic || hasGreek)) {
     return { isHomograph: true, scripts: [hasCyrillic && 'Cyrillic', hasGreek && 'Greek'].filter(Boolean) };
-  }
-
-  if (domain.includes('xn--')) {
-    return { isHomograph: true, scripts: ['Punycode'] };
   }
 
   return { isHomograph: false };
