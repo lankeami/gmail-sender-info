@@ -1215,12 +1215,20 @@
     subjectEl.parentElement.insertBefore(banner, subjectEl);
 
     // Size to the email body area rather than the narrow subject wrapper
-    const bodyEl = document.querySelector('.ii .a3s') || document.querySelector('.gs');
-    if (bodyEl) {
-      const bodyWidth = bodyEl.offsetWidth;
-      if (bodyWidth > banner.offsetWidth) {
-        banner.style.width = bodyWidth + 'px';
+    function matchBodyWidth() {
+      const bodyEl = document.querySelector('.ii .a3s') || document.querySelector('.gs');
+      if (bodyEl) {
+        const bodyWidth = bodyEl.offsetWidth;
+        if (bodyWidth > banner.offsetWidth) {
+          banner.style.width = bodyWidth + 'px';
+          return true;
+        }
       }
+      return false;
+    }
+    if (!matchBodyWidth()) {
+      setTimeout(() => { if (banner.isConnected) matchBodyWidth(); }, 300);
+      setTimeout(() => { if (banner.isConnected) matchBodyWidth(); }, 1000);
     }
 
     currentBannerEmail = info.fullDomain;
@@ -1235,7 +1243,15 @@
       geminiIcon.style.display = '';
       aiLine.style.display = '';
 
-      const emailData = extractEmailData(envelopeEmail);
+      let emailData = extractEmailData(envelopeEmail);
+
+      // Body may not be rendered yet — retry before committing to empty
+      if (emailData.isEmptyBody) {
+        await new Promise(r => setTimeout(r, 500));
+        if (!banner.isConnected) return;
+        emailData = extractEmailData(envelopeEmail);
+      }
+
       const msgResult = getMessageId();
       if (msgResult) {
         emailData.messageId = msgResult.id;
@@ -1245,7 +1261,6 @@
         }
       }
 
-      // Show empty body pill immediately (no async needed)
       if (emailData.isEmptyBody) {
         emptyBodyPill.style.display = '';
       }
