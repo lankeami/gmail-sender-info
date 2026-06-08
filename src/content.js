@@ -612,6 +612,9 @@
       if (bannerState && bannerState.resolvedLogoSource === SOURCE_UNKNOWN && verdictKey === 'trusted') {
         verdictKey = 'caution';
       }
+      if (info.homograph?.isHomograph) {
+        verdictKey = 'dangerous';
+      }
       if (bannerState) bannerState.authVerdict = verdictKey;
 
       // Update strip verdict pill and gemini icon
@@ -1033,6 +1036,18 @@
     stripRow.appendChild(spfPill);
     stripRow.appendChild(dkimPill);
     stripRow.appendChild(dmarcPill);
+
+    // Homograph / punycode detection pill (hidden by default)
+    const homographPill = document.createElement('span');
+    homographPill.classList.add('gsi-pill', 'gsi-pill-fail');
+    homographPill.textContent = 'SPOOFED DOMAIN ✗';
+    homographPill.style.display = 'none';
+    stripRow.appendChild(homographPill);
+
+    if (info.homograph?.isHomograph) {
+      homographPill.style.display = '';
+      homographPill.title = `Domain uses mixed Unicode scripts: ${info.homograph.scripts.join(', ')}`;
+    }
 
     // Divider
     const div2 = document.createElement('span');
