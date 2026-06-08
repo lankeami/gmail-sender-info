@@ -744,7 +744,11 @@
     const subject = subjectEl ? subjectEl.textContent.trim() : '';
 
     // Body text (truncated to ~2000 chars to fit token limits)
-    const bodyEl = msgContainer.querySelector('.ii .a3s') || document.querySelector('.ii .a3s');
+    // AMP emails (e.g. Google Docs sharing) may not use .a3s — fall back to .ii
+    const bodyEl = msgContainer.querySelector('.ii .a3s')
+      || document.querySelector('.ii .a3s')
+      || msgContainer.querySelector('.ii')
+      || document.querySelector('.ii');
     const bodyText = bodyEl ? bodyEl.innerText.substring(0, 2000) : '';
 
     // Links in the body
