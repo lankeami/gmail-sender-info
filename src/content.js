@@ -773,7 +773,11 @@
       }
     }
 
-    const isEmptyBody = !bodyText || bodyText.trim().length < 10;
+    // A truly empty email has no text AND no meaningful HTML structure.
+    // AMP/rich emails may have empty innerText but substantial child elements.
+    const textEmpty = !bodyText || bodyText.trim().length < 10;
+    const hasRichContent = bodyEl && (bodyEl.children.length > 2 || bodyEl.innerHTML.length > 200);
+    const isEmptyBody = textEmpty && !hasRichContent;
     return { displayName, senderEmail: envelopeEmail, subject, bodyText, links, isEmptyBody };
   }
 
