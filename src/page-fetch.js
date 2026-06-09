@@ -85,12 +85,15 @@ window.addEventListener('message', async (event) => {
       if (origSenderMatch) authData.originalSender = origSenderMatch[1].toLowerCase().trim();
 
       // Extract To, Cc, Bcc, Delivered-To, and mailing list headers for BCC detection
-      const toMatch = stripped.match(/\bTo[:\s]+([^\n]+)/i);
-      if (toMatch) authData.toHeader = toMatch[1].trim();
-      const ccMatch = stripped.match(/\bCc[:\s]+([^\n]+)/i);
-      if (ccMatch) authData.ccHeader = ccMatch[1].trim();
-      const bccMatch = stripped.match(/\bBcc[:\s]+([^\n]+)/i);
-      if (bccMatch) authData.bccHeader = bccMatch[1].trim();
+      // Recipient lists can span multiple lines in the HTML source; capture
+      // continuation lines that don't start with a header name (Word:).
+      const hdrVal = '[^\\n]*(?:\\n(?![A-Za-z][\\w-]*\\s*:)[^\\n]*)*';
+      const toMatch = stripped.match(new RegExp('(?<![\\w-])To[:\\s]+(' + hdrVal + ')', 'i'));
+      if (toMatch) authData.toHeader = toMatch[1].replace(/\n/g, ' ').trim();
+      const ccMatch = stripped.match(new RegExp('\\bCc[:\\s]+(' + hdrVal + ')', 'i'));
+      if (ccMatch) authData.ccHeader = ccMatch[1].replace(/\n/g, ' ').trim();
+      const bccMatch = stripped.match(new RegExp('\\bBcc[:\\s]+(' + hdrVal + ')', 'i'));
+      if (bccMatch) authData.bccHeader = bccMatch[1].replace(/\n/g, ' ').trim();
       const deliveredToMatch = stripped.match(/Delivered-To[:\s]+([^\s<]+@[^\s>]+)/i);
       if (deliveredToMatch) authData.deliveredTo = deliveredToMatch[1].toLowerCase().trim();
       const replyToMatch = stripped.match(/\bReply-To\s*:\s*([^\n]*@[^\n]*)/i);
