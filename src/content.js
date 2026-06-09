@@ -612,6 +612,9 @@
       if (bannerState && bannerState.resolvedLogoSource === SOURCE_UNKNOWN && verdictKey === 'trusted') {
         verdictKey = 'caution';
       }
+      if (info.homograph?.isHomograph) {
+        verdictKey = 'dangerous';
+      }
       if (bannerState) bannerState.authVerdict = verdictKey;
 
       // Update strip verdict pill and gemini icon
@@ -741,7 +744,11 @@
     const subject = subjectEl ? subjectEl.textContent.trim() : '';
 
     // Body text (truncated to ~2000 chars to fit token limits)
-    const bodyEl = msgContainer.querySelector('.ii .a3s') || document.querySelector('.ii .a3s');
+    // AMP emails (e.g. Google Docs sharing) may not use .a3s — fall back to .ii
+    const bodyEl = msgContainer.querySelector('.ii .a3s')
+      || document.querySelector('.ii .a3s')
+      || msgContainer.querySelector('.ii')
+      || document.querySelector('.ii');
     const bodyText = bodyEl ? bodyEl.innerText.substring(0, 2000) : '';
 
     // Links in the body
@@ -766,7 +773,11 @@
       }
     }
 
-    const isEmptyBody = !bodyText || bodyText.trim().length < 10;
+    // A truly empty email has no text AND no meaningful HTML structure.
+    // AMP/rich emails may have empty innerText but substantial child elements.
+    const textEmpty = !bodyText || bodyText.trim().length < 10;
+    const hasRichContent = bodyEl && (bodyEl.children.length > 2 || bodyEl.innerHTML.length > 200);
+    const isEmptyBody = textEmpty && !hasRichContent;
     return { displayName, senderEmail: envelopeEmail, subject, bodyText, links, isEmptyBody };
   }
 
@@ -1034,6 +1045,18 @@
     stripRow.appendChild(dkimPill);
     stripRow.appendChild(dmarcPill);
 
+    // Homograph / punycode detection pill (hidden by default)
+    const homographPill = document.createElement('span');
+    homographPill.classList.add('gsi-pill', 'gsi-pill-fail');
+    homographPill.textContent = 'SPOOFED DOMAIN ✗';
+    homographPill.style.display = 'none';
+    stripRow.appendChild(homographPill);
+
+    if (info.homograph?.isHomograph) {
+      homographPill.style.display = '';
+      homographPill.title = `Domain uses mixed Unicode scripts: ${info.homograph.scripts.join(', ')}`;
+    }
+
     // Divider
     const div2 = document.createElement('span');
     div2.classList.add('gsi-strip-divider');
@@ -1200,12 +1223,20 @@
     subjectEl.parentElement.insertBefore(banner, subjectEl);
 
     // Size to the email body area rather than the narrow subject wrapper
-    const bodyEl = document.querySelector('.ii .a3s') || document.querySelector('.gs');
-    if (bodyEl) {
-      const bodyWidth = bodyEl.offsetWidth;
-      if (bodyWidth > banner.offsetWidth) {
-        banner.style.width = bodyWidth + 'px';
+    function matchBodyWidth() {
+      const bodyEl = document.querySelector('.ii .a3s') || document.querySelector('.gs');
+      if (bodyEl) {
+        const bodyWidth = bodyEl.offsetWidth;
+        if (bodyWidth > banner.offsetWidth) {
+          banner.style.width = bodyWidth + 'px';
+          return true;
+        }
       }
+      return false;
+    }
+    if (!matchBodyWidth()) {
+      setTimeout(() => { if (banner.isConnected) matchBodyWidth(); }, 300);
+      setTimeout(() => { if (banner.isConnected) matchBodyWidth(); }, 1000);
     }
 
     currentBannerEmail = info.fullDomain;
@@ -1220,7 +1251,15 @@
       geminiIcon.style.display = '';
       aiLine.style.display = '';
 
-      const emailData = extractEmailData(envelopeEmail);
+      let emailData = extractEmailData(envelopeEmail);
+
+      // Body may not be rendered yet — retry before committing to empty
+      if (emailData.isEmptyBody) {
+        await new Promise(r => setTimeout(r, 500));
+        if (!banner.isConnected) return;
+        emailData = extractEmailData(envelopeEmail);
+      }
+
       const msgResult = getMessageId();
       if (msgResult) {
         emailData.messageId = msgResult.id;
@@ -1230,7 +1269,6 @@
         }
       }
 
-      // Show empty body pill immediately (no async needed)
       if (emailData.isEmptyBody) {
         emptyBodyPill.style.display = '';
       }
@@ -1276,6 +1314,13 @@
           } else if (bccStatus === 'direct') {
             emailData.recipientStatus = 'direct';
           }
+          banner.__gsiBccDebug = {
+            deliveredTo: recipientHeaders?.deliveredTo || '',
+            to: (recipientHeaders?.to || '').substring(0, 300),
+            cc: (recipientHeaders?.cc || '').substring(0, 300),
+            bcc: (recipientHeaders?.bcc || '').substring(0, 300),
+            status: bccStatus,
+          };
 
           // Reply-To mismatch detection
           const replyToHeader = recipientHeaders?.replyTo;
@@ -1492,6 +1537,29 @@
       debugLines.push(`From: ${envelopeEmail || '(none)'}`);
       debugLines.push(`Reply-To: ${replyToHeader || '(not set)'}`);
       debugLines.push(`Mismatch: ${replyToMismatch ? `YES — replies go to ${replyToMismatch.replyToDomain} instead of ${replyToMismatch.senderDomain}` : 'no'}`);
+
+      // BCC detection diagnostics (compute here since the other IIFE may not have finished)
+      {
+        let rh = null;
+        if (result.authData) {
+          rh = {
+            to: result.authData.toHeader || '',
+            cc: result.authData.ccHeader || '',
+            bcc: result.authData.bccHeader || '',
+            deliveredTo: result.authData.deliveredTo || '',
+            isMailingList: result.authData.isMailingList || false,
+          };
+        } else if (result.headers) {
+          rh = parseRecipientHeaders(result.headers);
+        }
+        const bccSt = detectBccStatus(rh);
+        debugLines.push('--- BCC Detection ---');
+        debugLines.push(`deliveredTo: ${rh?.deliveredTo || '(none)'}`);
+        debugLines.push(`To: ${(rh?.to || '(none)').substring(0, 300)}`);
+        debugLines.push(`Cc: ${(rh?.cc || '(none)').substring(0, 300)}`);
+        if (rh?.bcc) debugLines.push(`Bcc: ${rh.bcc.substring(0, 300)}`);
+        debugLines.push(`status: ${bccSt || '(null)'}`);
+      }
 
       // Profile image diagnostics
       const pd = banner.__gsiProfileDebug;

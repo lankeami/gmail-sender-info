@@ -124,6 +124,25 @@ async function checkIsGlobe(domain) {
   }
 }
 
+function detectHomograph(domain) {
+  if (domain.includes('xn--')) {
+    return { isHomograph: true, scripts: ['Punycode'] };
+  }
+
+  const ascii = /^[a-z0-9.-]+$/;
+  if (ascii.test(domain)) return { isHomograph: false };
+
+  const hasLatin = /[a-z]/i.test(domain);
+  const hasCyrillic = /[Ѐ-ӿ]/.test(domain);
+  const hasGreek = /[Ͱ-Ͽ]/.test(domain);
+
+  if (hasLatin && (hasCyrillic || hasGreek)) {
+    return { isHomograph: true, scripts: [hasCyrillic && 'Cyrillic', hasGreek && 'Greek'].filter(Boolean) };
+  }
+
+  return { isHomograph: false };
+}
+
 /**
  * Resolve logo for a sender domain.
  * Chain: BIMI → Google root favicon → direct /favicon.ico → caution.
@@ -154,6 +173,7 @@ async function resolveLogo(fullDomain) {
   return {
     fullDomain,
     rootDomain,
+    homograph: detectHomograph(fullDomain),
     logoUrl: bimiUrl,
     logoSource: bimiUrl ? 'bimi' : 'favicon',
     faviconRootUrl: rootGoogleUrl,
