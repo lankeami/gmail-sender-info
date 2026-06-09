@@ -1,7 +1,6 @@
 ---
 name: release
 description: Create a new release for gmail-sender-info. Generates a date-based version, bumps manifest.json, commits, tags, pushes, and creates a GitHub release.
-disable-model-invocation: true
 allowed-tools: Bash(git *), Bash(gh *), Bash(date *), Read, Grep, Edit
 ---
 
