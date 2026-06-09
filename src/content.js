@@ -1314,6 +1314,13 @@
           } else if (bccStatus === 'direct') {
             emailData.recipientStatus = 'direct';
           }
+          banner.__gsiBccDebug = {
+            deliveredTo: recipientHeaders?.deliveredTo || '',
+            to: (recipientHeaders?.to || '').substring(0, 300),
+            cc: (recipientHeaders?.cc || '').substring(0, 300),
+            bcc: (recipientHeaders?.bcc || '').substring(0, 300),
+            status: bccStatus,
+          };
 
           // Reply-To mismatch detection
           const replyToHeader = recipientHeaders?.replyTo;
@@ -1530,6 +1537,29 @@
       debugLines.push(`From: ${envelopeEmail || '(none)'}`);
       debugLines.push(`Reply-To: ${replyToHeader || '(not set)'}`);
       debugLines.push(`Mismatch: ${replyToMismatch ? `YES — replies go to ${replyToMismatch.replyToDomain} instead of ${replyToMismatch.senderDomain}` : 'no'}`);
+
+      // BCC detection diagnostics (compute here since the other IIFE may not have finished)
+      {
+        let rh = null;
+        if (result.authData) {
+          rh = {
+            to: result.authData.toHeader || '',
+            cc: result.authData.ccHeader || '',
+            bcc: result.authData.bccHeader || '',
+            deliveredTo: result.authData.deliveredTo || '',
+            isMailingList: result.authData.isMailingList || false,
+          };
+        } else if (result.headers) {
+          rh = parseRecipientHeaders(result.headers);
+        }
+        const bccSt = detectBccStatus(rh);
+        debugLines.push('--- BCC Detection ---');
+        debugLines.push(`deliveredTo: ${rh?.deliveredTo || '(none)'}`);
+        debugLines.push(`To: ${(rh?.to || '(none)').substring(0, 300)}`);
+        debugLines.push(`Cc: ${(rh?.cc || '(none)').substring(0, 300)}`);
+        if (rh?.bcc) debugLines.push(`Bcc: ${rh.bcc.substring(0, 300)}`);
+        debugLines.push(`status: ${bccSt || '(null)'}`);
+      }
 
       // Profile image diagnostics
       const pd = banner.__gsiProfileDebug;
