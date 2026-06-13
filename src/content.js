@@ -1549,6 +1549,22 @@
           debugLines.push(`SPF: ${result.authData.spf || 'n/a'} | DKIM: ${result.authData.dkim || 'n/a'} | DMARC: ${result.authData.dmarc || 'n/a'} (raw headers not available)`);
         }
       }
+
+      // GeoIP Resolution
+      debugLines.push('--- GeoIP Resolution ---');
+      if (info.countryCode) {
+        debugLines.push(`Country Code: ${info.countryCode}`);
+        debugLines.push(`Country Name: ${info.countryName || '(unknown)'}`);
+        debugLines.push(`Method: ${info.countryMethod || 'unknown'}`);
+        if (info.resolvedIp) {
+          debugLines.push(`Resolved IP: ${info.resolvedIp}`);
+        }
+      } else if (info.countryMethod === 'geoip-timeout') {
+        debugLines.push('Status: timeout');
+      } else {
+        debugLines.push('Status: (not resolved)');
+      }
+
       debugLines.push(`BIMI: ${info.logoSource === 'bimi' ? 'pass (DNS)' : 'none'}`);
 
       // Reply-To diagnostics
