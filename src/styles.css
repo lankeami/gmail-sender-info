@@ -374,3 +374,10 @@
   border-radius: 2px;
   object-fit: contain;
 }
+
+.gsi-country-flag {
+  font-size: 16px;
+  display: inline-block;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
