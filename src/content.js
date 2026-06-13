@@ -665,6 +665,20 @@
     rootLine.textContent = info.rootDomain;
     tip.appendChild(rootLine);
 
+    // Country flag (if available)
+    if (info.countryCode) {
+      const flagEmoji = countryCodeToFlag(info.countryCode);
+      if (flagEmoji) {
+        const flagLine = document.createElement('div');
+        flagLine.classList.add('gsi-domain-country');
+        flagLine.textContent = `${flagEmoji} ${info.countryName || info.countryCode}`;
+        flagLine.style.marginTop = '2px';
+        flagLine.style.fontSize = '11px';
+        flagLine.style.color = '#5f6368';
+        tip.appendChild(flagLine);
+      }
+    }
+
     // Row 3: source badge (colored by onload callback)
     tip.appendChild(sourceBadge);
 
