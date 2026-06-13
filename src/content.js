@@ -1020,6 +1020,18 @@
       stripRow.appendChild(rootSpan);
     }
 
+    // Country flag (if available)
+    if (info.countryCode) {
+      const flagEmoji = countryCodeToFlag(info.countryCode);
+      if (flagEmoji) {
+        const flagSpan = document.createElement('span');
+        flagSpan.classList.add('gsi-country-flag');
+        flagSpan.textContent = flagEmoji;
+        flagSpan.title = info.countryName || info.countryCode;
+        stripRow.appendChild(flagSpan);
+      }
+    }
+
     // Profile image (20x20, conditional)
     function tryAddProfileImage() {
       const result = extractProfileImageUrl(envelopeEmail);
