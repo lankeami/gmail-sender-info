@@ -91,6 +91,35 @@ function gstaticFaviconV2Url(domain) {
   return `https://t0.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=http://${encodeURIComponent(domain)}&size=32`;
 }
 
+/**
+ * Lookup country information for an IP address via ip-api.com.
+ * Returns { countryCode, countryName } or { countryCode: null } on failure.
+ * Enforces 5s timeout to prevent hanging.
+ */
+async function lookupCountry(ip) {
+  const url = `https://ip-api.com/json/${encodeURIComponent(ip)}?fields=countryCode,country`;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 5000);
+
+  try {
+    const resp = await fetch(url, { signal: controller.signal });
+    if (!resp.ok) return { countryCode: null };
+
+    const data = await resp.json();
+    if (data.status === 'fail') return { countryCode: null };
+
+    return {
+      countryCode: data.countryCode || null,
+      countryName: data.country || null,
+    };
+  } catch (e) {
+    // Timeout, network error, or invalid JSON
+    return { countryCode: null };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 let globeRefBytes = null;
 
 async function getGlobeRefBytes() {
@@ -170,6 +199,34 @@ async function resolveLogo(fullDomain) {
   // Check root favicon for globe (used for the main logo fallback)
   const rootIsGlobe = await checkIsGlobe(rootDomain);
 
+  // Resolve DNS A record and perform GeoIP lookup
+  let countryCode = null;
+  let countryName = null;
+  let countryMethod = null;
+  let resolvedIp = null;
+
+  try {
+    const dnsUrl = `https://dns.google/resolve?name=${encodeURIComponent(rootDomain)}&type=A`;
+    const dnsResp = await fetch(dnsUrl);
+    if (dnsResp.ok) {
+      const dnsData = await dnsResp.json();
+      if (dnsData.Answer && dnsData.Answer.length > 0) {
+        // Extract first A record IP
+        resolvedIp = dnsData.Answer[0].data;
+        if (resolvedIp) {
+          const geoData = await lookupCountry(resolvedIp);
+          if (geoData.countryCode) {
+            countryCode = geoData.countryCode;
+            countryName = geoData.countryName;
+            countryMethod = 'geoip';
+          }
+        }
+      }
+    }
+  } catch {
+    // DNS or GeoIP lookup failed — continue without country data
+  }
+
   return {
     fullDomain,
     rootDomain,
@@ -196,6 +253,10 @@ async function resolveLogo(fullDomain) {
         directUrl: `https://${wwwDomain}/favicon.ico`,
       },
     },
+    countryCode,
+    countryName,
+    countryMethod,
+    resolvedIp,
   };
 }
 
