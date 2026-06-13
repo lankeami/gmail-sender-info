@@ -893,6 +893,21 @@
 
   let currentBannerEmail = null;
 
+  /**
+   * Convert ISO 2-letter country code to flag emoji using regional indicator pairs.
+   * US → 🇺🇸, GB → 🇬🇧, RU → 🇷🇺, etc.
+   */
+  function countryCodeToFlag(code) {
+    if (!code || code.length !== 2) return null;
+    const codeUpper = code.toUpperCase();
+    // Regional indicator: A=0x1F1E6, Z=0x1F1FF
+    const offset = 0x1F1E6 - 'A'.charCodeAt(0);
+    return String.fromCodePoint(
+      codeUpper.charCodeAt(0) + offset,
+      codeUpper.charCodeAt(1) + offset
+    );
+  }
+
   function removeBanner() {
     const existing = document.getElementById('gsi-banner');
     if (existing) existing.remove();
