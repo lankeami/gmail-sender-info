@@ -6,8 +6,7 @@
   "permissions": ["storage"],
   "host_permissions": [
     "https://dns.google/*",
-    "https://*.gstatic.com/*",
-    "https://ip-api.com/*"
+    "https://*.gstatic.com/*"
   ],
   "background": {
     "service_worker": "src/background.js"

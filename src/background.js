@@ -91,33 +91,141 @@ function gstaticFaviconV2Url(domain) {
   return `https://t0.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=http://${encodeURIComponent(domain)}&size=32`;
 }
 
-/**
- * Lookup country information for an IP address via ip-api.com.
- * Returns { countryCode, countryName } or { countryCode: null } on failure.
- * Enforces 5s timeout to prevent hanging.
- */
-async function lookupCountry(ip) {
-  const url = `https://ip-api.com/json/${encodeURIComponent(ip)}?fields=countryCode,country`;
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 5000);
+const CCTLD_COUNTRIES = {
+  ac: { code: 'AC', name: 'Ascension Island' },
+  ad: { code: 'AD', name: 'Andorra' },
+  ae: { code: 'AE', name: 'United Arab Emirates' },
+  af: { code: 'AF', name: 'Afghanistan' },
+  ag: { code: 'AG', name: 'Antigua and Barbuda' },
+  al: { code: 'AL', name: 'Albania' },
+  am: { code: 'AM', name: 'Armenia' },
+  ao: { code: 'AO', name: 'Angola' },
+  ar: { code: 'AR', name: 'Argentina' },
+  at: { code: 'AT', name: 'Austria' },
+  au: { code: 'AU', name: 'Australia' },
+  az: { code: 'AZ', name: 'Azerbaijan' },
+  ba: { code: 'BA', name: 'Bosnia and Herzegovina' },
+  bd: { code: 'BD', name: 'Bangladesh' },
+  be: { code: 'BE', name: 'Belgium' },
+  bg: { code: 'BG', name: 'Bulgaria' },
+  bh: { code: 'BH', name: 'Bahrain' },
+  bn: { code: 'BN', name: 'Brunei' },
+  bo: { code: 'BO', name: 'Bolivia' },
+  br: { code: 'BR', name: 'Brazil' },
+  by: { code: 'BY', name: 'Belarus' },
+  ca: { code: 'CA', name: 'Canada' },
+  ch: { code: 'CH', name: 'Switzerland' },
+  cl: { code: 'CL', name: 'Chile' },
+  cn: { code: 'CN', name: 'China' },
+  cr: { code: 'CR', name: 'Costa Rica' },
+  cu: { code: 'CU', name: 'Cuba' },
+  cy: { code: 'CY', name: 'Cyprus' },
+  cz: { code: 'CZ', name: 'Czech Republic' },
+  de: { code: 'DE', name: 'Germany' },
+  dk: { code: 'DK', name: 'Denmark' },
+  do: { code: 'DO', name: 'Dominican Republic' },
+  dz: { code: 'DZ', name: 'Algeria' },
+  ec: { code: 'EC', name: 'Ecuador' },
+  ee: { code: 'EE', name: 'Estonia' },
+  eg: { code: 'EG', name: 'Egypt' },
+  es: { code: 'ES', name: 'Spain' },
+  et: { code: 'ET', name: 'Ethiopia' },
+  fi: { code: 'FI', name: 'Finland' },
+  fr: { code: 'FR', name: 'France' },
+  ge: { code: 'GE', name: 'Georgia' },
+  gh: { code: 'GH', name: 'Ghana' },
+  gr: { code: 'GR', name: 'Greece' },
+  gt: { code: 'GT', name: 'Guatemala' },
+  hk: { code: 'HK', name: 'Hong Kong' },
+  hn: { code: 'HN', name: 'Honduras' },
+  hr: { code: 'HR', name: 'Croatia' },
+  hu: { code: 'HU', name: 'Hungary' },
+  id: { code: 'ID', name: 'Indonesia' },
+  ie: { code: 'IE', name: 'Ireland' },
+  il: { code: 'IL', name: 'Israel' },
+  in: { code: 'IN', name: 'India' },
+  iq: { code: 'IQ', name: 'Iraq' },
+  ir: { code: 'IR', name: 'Iran' },
+  is: { code: 'IS', name: 'Iceland' },
+  it: { code: 'IT', name: 'Italy' },
+  jm: { code: 'JM', name: 'Jamaica' },
+  jo: { code: 'JO', name: 'Jordan' },
+  jp: { code: 'JP', name: 'Japan' },
+  ke: { code: 'KE', name: 'Kenya' },
+  kg: { code: 'KG', name: 'Kyrgyzstan' },
+  kh: { code: 'KH', name: 'Cambodia' },
+  kr: { code: 'KR', name: 'South Korea' },
+  kw: { code: 'KW', name: 'Kuwait' },
+  kz: { code: 'KZ', name: 'Kazakhstan' },
+  lb: { code: 'LB', name: 'Lebanon' },
+  lk: { code: 'LK', name: 'Sri Lanka' },
+  lt: { code: 'LT', name: 'Lithuania' },
+  lu: { code: 'LU', name: 'Luxembourg' },
+  lv: { code: 'LV', name: 'Latvia' },
+  ma: { code: 'MA', name: 'Morocco' },
+  mk: { code: 'MK', name: 'North Macedonia' },
+  mm: { code: 'MM', name: 'Myanmar' },
+  mn: { code: 'MN', name: 'Mongolia' },
+  mo: { code: 'MO', name: 'Macau' },
+  mt: { code: 'MT', name: 'Malta' },
+  mu: { code: 'MU', name: 'Mauritius' },
+  mx: { code: 'MX', name: 'Mexico' },
+  my: { code: 'MY', name: 'Malaysia' },
+  mz: { code: 'MZ', name: 'Mozambique' },
+  ng: { code: 'NG', name: 'Nigeria' },
+  ni: { code: 'NI', name: 'Nicaragua' },
+  nl: { code: 'NL', name: 'Netherlands' },
+  no: { code: 'NO', name: 'Norway' },
+  np: { code: 'NP', name: 'Nepal' },
+  nz: { code: 'NZ', name: 'New Zealand' },
+  om: { code: 'OM', name: 'Oman' },
+  pa: { code: 'PA', name: 'Panama' },
+  pe: { code: 'PE', name: 'Peru' },
+  ph: { code: 'PH', name: 'Philippines' },
+  pk: { code: 'PK', name: 'Pakistan' },
+  pl: { code: 'PL', name: 'Poland' },
+  pr: { code: 'PR', name: 'Puerto Rico' },
+  pt: { code: 'PT', name: 'Portugal' },
+  py: { code: 'PY', name: 'Paraguay' },
+  qa: { code: 'QA', name: 'Qatar' },
+  ro: { code: 'RO', name: 'Romania' },
+  rs: { code: 'RS', name: 'Serbia' },
+  ru: { code: 'RU', name: 'Russia' },
+  rw: { code: 'RW', name: 'Rwanda' },
+  sa: { code: 'SA', name: 'Saudi Arabia' },
+  se: { code: 'SE', name: 'Sweden' },
+  sg: { code: 'SG', name: 'Singapore' },
+  si: { code: 'SI', name: 'Slovenia' },
+  sk: { code: 'SK', name: 'Slovakia' },
+  sn: { code: 'SN', name: 'Senegal' },
+  sv: { code: 'SV', name: 'El Salvador' },
+  th: { code: 'TH', name: 'Thailand' },
+  tn: { code: 'TN', name: 'Tunisia' },
+  tr: { code: 'TR', name: 'Turkey' },
+  tw: { code: 'TW', name: 'Taiwan' },
+  tz: { code: 'TZ', name: 'Tanzania' },
+  ua: { code: 'UA', name: 'Ukraine' },
+  ug: { code: 'UG', name: 'Uganda' },
+  uk: { code: 'GB', name: 'United Kingdom' },
+  us: { code: 'US', name: 'United States' },
+  uy: { code: 'UY', name: 'Uruguay' },
+  uz: { code: 'UZ', name: 'Uzbekistan' },
+  ve: { code: 'VE', name: 'Venezuela' },
+  vn: { code: 'VN', name: 'Vietnam' },
+  za: { code: 'ZA', name: 'South Africa' },
+  zw: { code: 'ZW', name: 'Zimbabwe' },
+};
 
-  try {
-    const resp = await fetch(url, { signal: controller.signal });
-    if (!resp.ok) return { countryCode: null };
-
-    const data = await resp.json();
-    if (data.status === 'fail') return { countryCode: null };
-
-    return {
-      countryCode: data.countryCode || null,
-      countryName: data.country || null,
-    };
-  } catch (e) {
-    // Timeout, network error, or invalid JSON
-    return { countryCode: null };
-  } finally {
-    clearTimeout(timeout);
+function lookupCcTLD(rootDomain) {
+  const parts = rootDomain.split('.');
+  let tld = parts[parts.length - 1].toLowerCase();
+  // Handle second-level ccTLDs like .co.uk, .com.au
+  if (parts.length >= 3 && ['co', 'com', 'org', 'net', 'gov', 'ac', 'edu'].includes(parts[parts.length - 2].toLowerCase())) {
+    tld = parts[parts.length - 1].toLowerCase();
   }
+  const entry = CCTLD_COUNTRIES[tld];
+  if (!entry) return { countryCode: null };
+  return { countryCode: entry.code, countryName: entry.name };
 }
 
 let globeRefBytes = null;
@@ -199,33 +307,11 @@ async function resolveLogo(fullDomain) {
   // Check root favicon for globe (used for the main logo fallback)
   const rootIsGlobe = await checkIsGlobe(rootDomain);
 
-  // Resolve DNS A record and perform GeoIP lookup
-  let countryCode = null;
-  let countryName = null;
-  let countryMethod = null;
-  let resolvedIp = null;
-
-  try {
-    const dnsUrl = `https://dns.google/resolve?name=${encodeURIComponent(rootDomain)}&type=A`;
-    const dnsResp = await fetch(dnsUrl);
-    if (dnsResp.ok) {
-      const dnsData = await dnsResp.json();
-      if (dnsData.Answer && dnsData.Answer.length > 0) {
-        // Extract first A record IP
-        resolvedIp = dnsData.Answer[0].data;
-        if (resolvedIp) {
-          const geoData = await lookupCountry(resolvedIp);
-          if (geoData.countryCode) {
-            countryCode = geoData.countryCode;
-            countryName = geoData.countryName;
-            countryMethod = 'geoip';
-          }
-        }
-      }
-    }
-  } catch {
-    // DNS or GeoIP lookup failed — continue without country data
-  }
+  // Country lookup via ccTLD (no external API, no new permissions)
+  const ccTLD = lookupCcTLD(rootDomain);
+  const countryCode = ccTLD.countryCode;
+  const countryName = ccTLD.countryName || null;
+  const countryMethod = countryCode ? 'cctld' : null;
 
   return {
     fullDomain,
@@ -256,7 +342,6 @@ async function resolveLogo(fullDomain) {
     countryCode,
     countryName,
     countryMethod,
-    resolvedIp,
   };
 }
 

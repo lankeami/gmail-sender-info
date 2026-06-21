@@ -1564,19 +1564,14 @@
         }
       }
 
-      // GeoIP Resolution
-      debugLines.push('--- GeoIP Resolution ---');
+      // Country Resolution
+      debugLines.push('--- Country Resolution ---');
       if (info.countryCode) {
         debugLines.push(`Country Code: ${info.countryCode}`);
         debugLines.push(`Country Name: ${info.countryName || '(unknown)'}`);
         debugLines.push(`Method: ${info.countryMethod || 'unknown'}`);
-        if (info.resolvedIp) {
-          debugLines.push(`Resolved IP: ${info.resolvedIp}`);
-        }
-      } else if (info.countryMethod === 'geoip-timeout') {
-        debugLines.push('Status: timeout');
       } else {
-        debugLines.push('Status: (not resolved)');
+        debugLines.push('Status: (no ccTLD detected)');
       }
 
       debugLines.push(`BIMI: ${info.logoSource === 'bimi' ? 'pass (DNS)' : 'none'}`);
