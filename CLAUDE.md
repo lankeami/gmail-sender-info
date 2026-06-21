@@ -32,7 +32,7 @@ gmail-sender-info/
 
 **Content → Background:** `{ action: 'getSenderInfo', email: 'user@example.com' }`
 
-**Background → Content:** `{ fullDomain, rootDomain, logoUrl, logoSource, faviconSubUrl, faviconRootUrl }`
+**Background → Content:** `{ fullDomain, rootDomain, logoUrl, logoSource, faviconSubUrl, faviconRootUrl, countryCode, countryName, countryMethod }`
 
 **Content → Background:** `{ action: 'checkAiAvailable' }`
 
@@ -87,6 +87,7 @@ The banner (`#gsi-banner`) is a compact horizontal strip with three sections sta
 | Logo | `.gsi-logo` | 24×24 sender logo from BIMI/favicon chain |
 | Domain | `.gsi-strip-domain` | 13px bold domain text |
 | Root domain | `.gsi-strip-root` | 11px grey `(rootDomain)` shown if different from fullDomain |
+| Country flag | `.gsi-country-flag` | Flag emoji from ccTLD lookup. `title` = country name. Hidden for non-ccTLD domains |
 | Profile image | `.gsi-profile-img` | 20×20 circular Gmail avatar (conditional — only real photos). Retries at 500ms/1500ms |
 | Via badge | `.gsi-via-badge` | "via domain" for mailing list emails |
 | Divider | `.gsi-strip-divider` | `\|` visual separator |
@@ -141,7 +142,8 @@ Hidden by default, toggled by expand arrow. Single-column stacked layout:
 
 1. **Favicon/Logo Source** (`.gsi-favicon-table`) — Comparison table showing subdomain, root, and www favicons with domains. Source line below shows which resolved (BIMI, favicon, unknown)
 2. **AI Analysis** — Full bulleted reasons list (`.gsi-ai-reasons` / `.gsi-ai-reason-item`)
-3. **Debug** (`.gsi-debug-section`) — Nested collapsible with envelope email, headers, BIMI DNS status
+3. **Country Resolution** — Country code, country name, and resolution method (in debug section)
+4. **Debug** (`.gsi-debug-section`) — Nested collapsible with envelope email, headers, BIMI DNS status, country resolution
 
 ## Development
 

@@ -665,6 +665,20 @@
     rootLine.textContent = info.rootDomain;
     tip.appendChild(rootLine);
 
+    // Country flag (if available)
+    if (info.countryCode) {
+      const flagEmoji = countryCodeToFlag(info.countryCode);
+      if (flagEmoji) {
+        const flagLine = document.createElement('div');
+        flagLine.classList.add('gsi-domain-country');
+        flagLine.textContent = `${flagEmoji} ${info.countryName || info.countryCode}`;
+        flagLine.style.marginTop = '2px';
+        flagLine.style.fontSize = '11px';
+        flagLine.style.color = '#5f6368';
+        tip.appendChild(flagLine);
+      }
+    }
+
     // Row 3: source badge (colored by onload callback)
     tip.appendChild(sourceBadge);
 
@@ -893,6 +907,21 @@
 
   let currentBannerEmail = null;
 
+  /**
+   * Convert ISO 2-letter country code to flag emoji using regional indicator pairs.
+   * US → 🇺🇸, GB → 🇬🇧, RU → 🇷🇺, etc.
+   */
+  function countryCodeToFlag(code) {
+    if (!code || code.length !== 2) return null;
+    const codeUpper = code.toUpperCase();
+    // Regional indicator: A=0x1F1E6, Z=0x1F1FF
+    const offset = 0x1F1E6 - 'A'.charCodeAt(0);
+    return String.fromCodePoint(
+      codeUpper.charCodeAt(0) + offset,
+      codeUpper.charCodeAt(1) + offset
+    );
+  }
+
   function removeBanner() {
     const existing = document.getElementById('gsi-banner');
     if (existing) existing.remove();
@@ -1003,6 +1032,18 @@
       rootSpan.classList.add('gsi-strip-root');
       rootSpan.textContent = `(${info.rootDomain})`;
       stripRow.appendChild(rootSpan);
+    }
+
+    // Country flag (if available)
+    if (info.countryCode) {
+      const flagEmoji = countryCodeToFlag(info.countryCode);
+      if (flagEmoji) {
+        const flagSpan = document.createElement('span');
+        flagSpan.classList.add('gsi-country-flag');
+        flagSpan.textContent = flagEmoji;
+        flagSpan.title = info.countryName || info.countryCode;
+        stripRow.appendChild(flagSpan);
+      }
     }
 
     // Profile image (20x20, conditional)
@@ -1522,6 +1563,17 @@
           debugLines.push(`SPF: ${result.authData.spf || 'n/a'} | DKIM: ${result.authData.dkim || 'n/a'} | DMARC: ${result.authData.dmarc || 'n/a'} (raw headers not available)`);
         }
       }
+
+      // Country Resolution
+      debugLines.push('--- Country Resolution ---');
+      if (info.countryCode) {
+        debugLines.push(`Country Code: ${info.countryCode}`);
+        debugLines.push(`Country Name: ${info.countryName || '(unknown)'}`);
+        debugLines.push(`Method: ${info.countryMethod || 'unknown'}`);
+      } else {
+        debugLines.push('Status: (no ccTLD detected)');
+      }
+
       debugLines.push(`BIMI: ${info.logoSource === 'bimi' ? 'pass (DNS)' : 'none'}`);
 
       // Reply-To diagnostics
