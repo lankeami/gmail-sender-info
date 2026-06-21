@@ -36,8 +36,9 @@ Chrome extension that displays sender domain information and email authenticatio
 | Google Favicon Service | `https://www.google.com/s2/favicons` | Fetches website favicons for sender domains |
 | gstatic Favicon V2 | `https://t0.gstatic.com/faviconV2` | Detects generic globe icons (no real favicon exists) |
 | Gmail `view=om` endpoint | `https://mail.google.com/mail/u/{n}/?view=om` | Fetches raw email headers for authentication checks |
+| ip-api.com | `https://ip-api.com/json/{ip}` | GeoIP country lookup for sender domain IPs |
 
-No data is sent to any third-party analytics, tracking, or non-Google service.
+No data is sent to any third-party analytics or tracking service. The only non-Google service used is ip-api.com for geographic country lookups based on publicly resolved IP addresses.
 
 ## Security Measures
 
@@ -46,7 +47,7 @@ No data is sent to any third-party analytics, tracking, or non-Google service.
 The extension requests only two permissions:
 
 - **`storage`** -- Caches BIMI/favicon results locally with a 24-hour TTL. Cache is cleared on extension install/update.
-- **`host_permissions`** for `dns.google` and `*.gstatic.com` -- Required for BIMI DNS lookups and globe-icon detection. No broad host access.
+- **`host_permissions`** for `dns.google`, `*.gstatic.com`, and `ip-api.com` -- Required for BIMI DNS lookups, globe-icon detection, and GeoIP country lookups.
 
 ### Header Fetching Without Extra Permissions
 
