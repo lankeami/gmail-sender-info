@@ -453,9 +453,12 @@
 
   /**
    * Detect Reply-To domain mismatch against the sender domain.
+   * When originalSenderEmail is provided (mailing-list forwarding), also
+   * compares Reply-To against the original sender — suppresses the warning
+   * when they share the same root domain.
    * Returns { replyToEmail, replyToDomain, senderDomain } if mismatched, or null.
    */
-  function detectReplyToMismatch(replyTo, senderEmail) {
+  function detectReplyToMismatch(replyTo, senderEmail, originalSenderEmail) {
     if (!replyTo || !senderEmail) return null;
     const replyToMatch = replyTo.match(/<([^>]+)>/) || [null, replyTo];
     const replyToEmail = (replyToMatch[1] || '').toLowerCase().trim();
@@ -463,6 +466,10 @@
     const replyToDomain = getRootDomain(replyToEmail.split('@')[1]);
     const senderDomain = getRootDomain(senderEmail.split('@')[1]);
     if (replyToDomain === senderDomain) return null;
+    if (originalSenderEmail && originalSenderEmail.includes('@')) {
+      const originalDomain = getRootDomain(originalSenderEmail.split('@')[1]);
+      if (replyToDomain === originalDomain) return null;
+    }
     return { replyToEmail, replyToDomain, senderDomain };
   }
 
@@ -1363,9 +1370,9 @@
             status: bccStatus,
           };
 
-          // Reply-To mismatch detection
+          // Reply-To mismatch detection (suppress for mailing-list forwarding)
           const replyToHeader = recipientHeaders?.replyTo;
-          const replyToMismatch = detectReplyToMismatch(replyToHeader, envelopeEmail);
+          const replyToMismatch = detectReplyToMismatch(replyToHeader, envelopeEmail, origSender);
           if (replyToMismatch) {
             replyToPill.style.display = '';
             replyToPill.title = `Replies go to ${replyToMismatch.replyToEmail} (${replyToMismatch.replyToDomain}) instead of sender (${replyToMismatch.senderDomain})`;
@@ -1578,16 +1585,21 @@
 
       // Reply-To diagnostics
       let replyToHeader = null;
+      let debugOrigSender = null;
       if (result.headers) {
         const rh = parseRecipientHeaders(result.headers);
         if (rh) replyToHeader = rh.replyTo;
-      } else if (result.authData?.replyTo) {
-        replyToHeader = result.authData.replyTo;
+        const ml = parseMailingListHeaders(result.headers);
+        if (ml) debugOrigSender = ml.originalSender;
+      } else if (result.authData) {
+        replyToHeader = result.authData.replyTo || null;
+        debugOrigSender = result.authData.originalSender || null;
       }
-      const replyToMismatch = detectReplyToMismatch(replyToHeader, envelopeEmail);
+      const replyToMismatch = detectReplyToMismatch(replyToHeader, envelopeEmail, debugOrigSender);
       debugLines.push('--- Reply-To ---');
       debugLines.push(`From: ${envelopeEmail || '(none)'}`);
       debugLines.push(`Reply-To: ${replyToHeader || '(not set)'}`);
+      if (debugOrigSender) debugLines.push(`X-Original-Sender: ${debugOrigSender}`);
       debugLines.push(`Mismatch: ${replyToMismatch ? `YES — replies go to ${replyToMismatch.replyToDomain} instead of ${replyToMismatch.senderDomain}` : 'no'}`);
 
       // BCC detection diagnostics (compute here since the other IIFE may not have finished)
