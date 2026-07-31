@@ -136,6 +136,22 @@ Always visible below the main strip (not inside the expandable details). Uses Ch
 5. Empty body detection (suspicious from unknown senders)
 6. Reply-To domain mismatch (replies routed to different domain than sender)
 
+#### 2b. Review Nag (`.gsi-review-nag`)
+
+Conditionally visible below the AI line, above the details panel. Prompts engaged users to leave a Chrome Web Store review.
+
+**Show conditions (all must be true):**
+- No `gsi_review_clicked_at` in storage (permanent dismiss)
+- No `gsi_review_snoozed_at` within last 14 days
+- `gsi_first_use_time` is 7+ days ago (set on first successful sender info lookup)
+- `gsi_email_view_count` >= 10 (incremented on each banner insert)
+
+**User actions:**
+- Click review link → sets `gsi_review_clicked_at`, nag never returns
+- Click X (dismiss) → sets `gsi_review_snoozed_at`, nag returns after 14 days
+
+**Storage keys** (`gsi_first_use_time`, `gsi_email_view_count`, `gsi_review_snoozed_at`, `gsi_review_clicked_at`) are preserved across `chrome.storage.local.clear()` in the `onInstalled` handler.
+
 #### 3. Details Panel (`.gsi-details-panel`)
 
 Hidden by default, toggled by expand arrow. Single-column stacked layout:

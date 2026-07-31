@@ -372,8 +372,13 @@ async function setCache(email, data) {
 
 // --- Clear stale cache on install/update ---
 
-chrome.runtime.onInstalled.addListener(() => {
-  chrome.storage.local.clear();
+chrome.runtime.onInstalled.addListener(async () => {
+  const reviewKeys = ['gsi_first_use_time', 'gsi_email_view_count', 'gsi_review_snoozed_at', 'gsi_review_clicked_at'];
+  const saved = await chrome.storage.local.get(reviewKeys);
+  await chrome.storage.local.clear();
+  if (Object.keys(saved).length > 0) {
+    await chrome.storage.local.set(saved);
+  }
   aiSession = null;
   aiAvailable = null;
   aiResultCache.clear();
@@ -579,6 +584,9 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
 
       const info = await resolveLogo(domain);
       await setCache(email, info);
+      chrome.storage.local.get('gsi_first_use_time', (r) => {
+        if (!r.gsi_first_use_time) chrome.storage.local.set({ gsi_first_use_time: Date.now() });
+      });
       sendResponse(info);
     })();
 
