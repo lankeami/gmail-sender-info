@@ -375,6 +375,48 @@
   object-fit: contain;
 }
 
+/* --- Review nag row --- */
+
+.gsi-review-nag {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border-top: 1px solid #ebebeb;
+  font-size: 12px;
+  color: #5f6368;
+}
+
+.gsi-review-nag-link {
+  color: #1a73e8;
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.gsi-review-nag-link:hover {
+  text-decoration: underline;
+}
+
+.gsi-review-nag-dismiss {
+  padding: 0;
+  width: 20px;
+  height: 20px;
+  font-size: 14px;
+  line-height: 20px;
+  text-align: center;
+  color: #9aa0a6;
+  background: none;
+  border: none;
+  border-radius: 50%;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.gsi-review-nag-dismiss:hover {
+  background: #e8eaed;
+  color: #3c4043;
+}
+
 .gsi-country-flag {
   font-size: 16px;
   display: inline-block;

@@ -1001,6 +1001,13 @@
     const subjectEl = document.querySelector('.hP');
     if (!subjectEl) return;
 
+    try {
+      chrome.storage.local.get('gsi_email_view_count', (r) => {
+        if (chrome.runtime.lastError) return;
+        chrome.storage.local.set({ gsi_email_view_count: (r.gsi_email_view_count || 0) + 1 });
+      });
+    } catch { /* context invalidated */ }
+
     const banner = document.createElement('div');
     banner.id = 'gsi-banner';
 
@@ -1254,6 +1261,59 @@
     detailsPanel.appendChild(aiDetailsSection);
 
     // 4. Debug section (nested collapsible) — built by original sender / debug async block
+
+    // --- Review nag (below AI line, above details) ---
+    const reviewNagRow = document.createElement('div');
+    reviewNagRow.classList.add('gsi-review-nag');
+    reviewNagRow.style.display = 'none';
+    banner.appendChild(reviewNagRow);
+
+    (async () => {
+      if (!contextValid) return;
+      try {
+        const rs = await new Promise(resolve => {
+          chrome.storage.local.get(
+            ['gsi_first_use_time', 'gsi_email_view_count', 'gsi_review_snoozed_at', 'gsi_review_clicked_at'],
+            resolve
+          );
+        });
+        if (rs.gsi_review_clicked_at) return;
+        if (rs.gsi_review_snoozed_at && (Date.now() - rs.gsi_review_snoozed_at) < 14 * 86400000) return;
+        if (!rs.gsi_first_use_time || (Date.now() - rs.gsi_first_use_time) < 7 * 86400000) return;
+        if ((rs.gsi_email_view_count || 0) < 10) return;
+        if (!banner.isConnected) return;
+
+        const text = document.createElement('span');
+        text.textContent = 'Enjoying Gmail Sender Info? ';
+        const link = document.createElement('a');
+        link.href = `https://chromewebstore.google.com/detail/${chrome.runtime.id}/reviews`;
+        link.target = '_blank';
+        link.rel = 'noopener';
+        link.classList.add('gsi-review-nag-link');
+        link.textContent = 'Leave a review';
+        link.addEventListener('click', () => {
+          chrome.storage.local.set({ gsi_review_clicked_at: Date.now() });
+          reviewNagRow.remove();
+        });
+        const spacer = document.createElement('div');
+        spacer.style.flex = '1';
+        const dismiss = document.createElement('button');
+        dismiss.classList.add('gsi-review-nag-dismiss');
+        dismiss.type = 'button';
+        dismiss.title = 'Dismiss';
+        dismiss.setAttribute('aria-label', 'Dismiss review prompt');
+        dismiss.textContent = '✕';
+        dismiss.addEventListener('click', () => {
+          chrome.storage.local.set({ gsi_review_snoozed_at: Date.now() });
+          reviewNagRow.remove();
+        });
+        reviewNagRow.appendChild(text);
+        reviewNagRow.appendChild(link);
+        reviewNagRow.appendChild(spacer);
+        reviewNagRow.appendChild(dismiss);
+        reviewNagRow.style.display = '';
+      } catch { /* storage access failed */ }
+    })();
 
     banner.appendChild(detailsPanel);
 
