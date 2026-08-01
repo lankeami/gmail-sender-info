@@ -1284,13 +1284,13 @@
         if (!banner.isConnected) return;
 
         const text = document.createElement('span');
-        text.textContent = 'Enjoying Gmail Sender Info? ';
+        text.textContent = 'Have we helped keep you safe? Help others find us by ';
         const link = document.createElement('a');
-        link.href = `https://chromewebstore.google.com/detail/${chrome.runtime.id}/reviews`;
+        link.href = 'https://chromewebstore.google.com/detail/gmail-sender-info/aogdnanhellgfimhgebopmcpaagoeckk/reviews';
         link.target = '_blank';
         link.rel = 'noopener';
         link.classList.add('gsi-review-nag-link');
-        link.textContent = 'Leave a review';
+        link.textContent = 'leaving a review';
         link.addEventListener('click', () => {
           chrome.storage.local.set({ gsi_review_clicked_at: Date.now() });
           reviewNagRow.remove();
