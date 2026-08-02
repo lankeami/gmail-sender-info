@@ -301,13 +301,23 @@
 
     const results = {};
 
-    const spfMatch = authLine.match(/spf=(pass|fail|softfail|neutral|none|temperror|permerror)/i);
+    // Plain "spf=" only — excludes "gateway.spf=", "arc.spf=", etc.
+    // (?<![\w.]) rejects a preceding letter/digit/underscore/dot, so
+    // "gateway.spf=pass" no longer gets misread as a genuine SPF pass.
+    const spfMatch = authLine.match(/(?<![\w.])spf=(pass|fail|softfail|neutral|none|temperror|permerror)/i);
     if (spfMatch) results.spf = spfMatch[1].toLowerCase();
 
-    const dkimMatch = authLine.match(/dkim=(pass|fail|neutral|none|temperror|permerror)/i);
+    // "gateway.spf=" reflects an admin-configured relay/IP allow-list
+    // (e.g. Google Workspace "bypass filters for internal senders"),
+    // NOT authentication of the sending domain — track separately so it
+    // is never conflated with a real SPF pass in the verdict logic.
+    const gatewaySpfMatch = authLine.match(/gateway\.spf=(pass|fail|softfail|neutral|none|temperror|permerror)/i);
+    if (gatewaySpfMatch) results.gatewaySpf = gatewaySpfMatch[1].toLowerCase();
+
+    const dkimMatch = authLine.match(/(?<![\w.])dkim=(pass|fail|neutral|none|temperror|permerror)/i);
     if (dkimMatch) results.dkim = dkimMatch[1].toLowerCase();
 
-    const dmarcMatch = authLine.match(/dmarc=(pass|fail|bestguesspass|none|temperror|permerror)/i);
+    const dmarcMatch = authLine.match(/(?<![\w.])dmarc=(pass|fail|bestguesspass|none|temperror|permerror)/i);
     if (dmarcMatch) results.dmarc = dmarcMatch[1].toLowerCase();
 
     return Object.keys(results).length > 0 ? results : null;
@@ -612,6 +622,13 @@
         if (value === 'pass') updatePillState(pill, 'pass', label);
         else if (value === 'fail' || value === 'softfail') updatePillState(pill, 'fail', label);
         else updatePillState(pill, 'loading', label); // n/a
+      }
+
+      // "gateway.spf" (e.g. Google Workspace relay/IP allow-list) is not
+      // real SPF authentication of the sender's domain — surface it as a
+      // tooltip on the SPF pill so it's visible without being counted as a pass.
+      if (!authResults.spf && authResults.gatewaySpf) {
+        pills.spf.title = `No SPF result for the sender's own domain. This message only passed a "gateway.spf=${authResults.gatewaySpf}" check — an admin-configured relay/IP allow-list, not sender authentication.`;
       }
 
       // Compute verdict (same logic as before)
@@ -1373,7 +1390,7 @@
         emailData.messageId = msgResult.id;
         const cached = securityCache.get(msgResult.id);
         if (cached) {
-          emailData.auth = { spf: cached.spf, dkim: cached.dkim, dmarc: cached.dmarc };
+          emailData.auth = { spf: cached.spf, dkim: cached.dkim, dmarc: cached.dmarc, gatewaySpf: cached.gatewaySpf };
         }
       }
 

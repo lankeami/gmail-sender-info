@@ -72,8 +72,14 @@ window.addEventListener('message', async (event) => {
       const stripped = text.replace(/<[^>]*>/g, ' ').replace(/&nbsp;/g, ' ').replace(/&#39;/g, "'").replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#(\d+);/g, (_, n) => String.fromCharCode(parseInt(n)));
       const authData = {};
 
-      const spfMatch = stripped.match(/\bSPF:\s*'?(PASS|FAIL|SOFTFAIL|NEUTRAL|NONE|TEMPERROR|PERMERROR)\b/i);
+      // Plain "SPF:" only — excludes "Gateway SPF:", which Gmail shows when a
+      // message only passed an admin-configured relay/IP allow-list rather
+      // than real authentication of the sender's own domain.
+      const spfMatch = stripped.match(/(?<!Gateway )\bSPF:\s*'?(PASS|FAIL|SOFTFAIL|NEUTRAL|NONE|TEMPERROR|PERMERROR)\b/i);
       if (spfMatch) authData.spf = spfMatch[1].toLowerCase();
+
+      const gatewaySpfMatch = stripped.match(/Gateway SPF:\s*'?(PASS|FAIL|SOFTFAIL|NEUTRAL|NONE|TEMPERROR|PERMERROR)\b/i);
+      if (gatewaySpfMatch) authData.gatewaySpf = gatewaySpfMatch[1].toLowerCase();
 
       const dkimMatch = stripped.match(/\bDKIM:\s*'?(PASS|FAIL|NEUTRAL|NONE|TEMPERROR|PERMERROR)\b/i);
       if (dkimMatch) authData.dkim = dkimMatch[1].toLowerCase();
