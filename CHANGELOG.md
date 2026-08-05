@@ -2,6 +2,7 @@
 
 ## 2026-08-05
 
+- [d30563a](https://github.com/lankeami/gmail-sender-info/commit/d30563af0ad6678b5d99f129cf5f240e4ce963eb) chore: release v20260805.1956
 - [55cf219](https://github.com/lankeami/gmail-sender-info/commit/55cf219447895d0c2e18d791bbaf8ffe6c9d2b21) Fix AI availability: handle model download, crash recovery, and timeouts
   - Only treat status "available" as ready (not "downloading"/"downloadable") - Add "Set up AI safety check" button to trigger model download with user gesture (Chrome requires a click to start the ~2GB Gemini Nano download) - Add withTimeout wrapper to prevent LanguageModel.create/clone/prompt from hanging indefinitely (60s create, 30s clone, 60s prompt) - Show user-friendly messages for each unavailable state: downloading, needs restart, timed out - Try LanguageModel.create() directly when availability() returns "unavailable" to get a more specific error message - Check window.ai.languageModel as fallback API path - Bump version to 2026.0805.2012
 - [e40f61a](https://github.com/lankeami/gmail-sender-info/commit/e40f61aa8be9b4a4fd9d21b810dc6f91da6e8b2b) chore: release v20260805.1201
