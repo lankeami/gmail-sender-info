@@ -246,17 +246,26 @@
 
   let headerRequestId = 0;
   const pendingHeaderRequests = new Map();
+  const pendingAiRequests = new Map();
 
   window.addEventListener('message', (event) => {
     if (event.source !== window) return;
-    if (event.data?.type !== 'gsi-headers-result') return;
-    const { requestId, headers, authData, error } = event.data;
-    const resolve = pendingHeaderRequests.get(requestId);
-    if (resolve) {
-      pendingHeaderRequests.delete(requestId);
-      if (error) resolve({ error });
-      else if (authData) resolve({ authData });
-      else resolve({ headers });
+    const { type, requestId } = event.data || {};
+    if (type === 'gsi-headers-result') {
+      const resolve = pendingHeaderRequests.get(requestId);
+      if (resolve) {
+        pendingHeaderRequests.delete(requestId);
+        const { headers, authData, error } = event.data;
+        if (error) resolve({ error });
+        else if (authData) resolve({ authData });
+        else resolve({ headers });
+      }
+    } else if (type === 'gsi-ai-available-result' || type === 'gsi-ai-analysis-result') {
+      const resolve = pendingAiRequests.get(requestId);
+      if (resolve) {
+        pendingAiRequests.delete(requestId);
+        resolve(event.data);
+      }
     }
   });
 
@@ -811,44 +820,47 @@
 
   /**
    * Check if Chrome's Prompt API (Gemini Nano) is available.
-   * Returns { available, hasApi, status, chromeVersion } for diagnostics.
+   * Queries the MAIN world script (page-fetch.js) via postMessage.
    */
   function checkAiAvailable() {
-    if (!contextValid) return Promise.resolve({ available: false });
     return new Promise((resolve) => {
-      try {
-        chrome.runtime.sendMessage({ action: 'checkAiAvailable' }, (resp) => {
-          if (chrome.runtime.lastError || !resp) resolve({ available: false });
-          else resolve({ ...resp, chromeVersion: getChromeVersion() });
-        });
-      } catch {
-        resolve({ available: false });
-      }
+      const requestId = ++headerRequestId;
+      pendingAiRequests.set(requestId, (resp) => {
+        resolve({ ...resp, chromeVersion: getChromeVersion() });
+      });
+      window.postMessage({ type: 'gsi-check-ai', requestId }, '*');
+      setTimeout(() => {
+        if (pendingAiRequests.has(requestId)) {
+          pendingAiRequests.delete(requestId);
+          resolve({ available: false });
+        }
+      }, 5000);
     });
   }
 
   /**
-   * Send email data to background for AI analysis.
+   * Send email data to MAIN world for AI analysis.
    * Resolves with result, { timeout: true }, or null.
    */
   function requestAiAnalysis(emailData, { skipCache = false } = {}) {
-    if (!contextValid) return Promise.resolve(null);
     return new Promise((resolve) => {
+      const requestId = ++headerRequestId;
       let settled = false;
       const timer = setTimeout(() => {
-        if (!settled) { settled = true; resolve({ timeout: true }); }
-      }, 30000);
-      try {
-        chrome.runtime.sendMessage({ action: 'analyzeEmail', data: emailData, skipCache }, (resp) => {
-          if (settled) return;
+        if (!settled) {
           settled = true;
-          clearTimeout(timer);
-          if (chrome.runtime.lastError || !resp || resp.unavailable) resolve(null);
-          else resolve(resp);
-        });
-      } catch {
-        if (!settled) { settled = true; clearTimeout(timer); resolve(null); }
-      }
+          pendingAiRequests.delete(requestId);
+          resolve({ timeout: true });
+        }
+      }, 30000);
+      pendingAiRequests.set(requestId, (resp) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        if (resp.unavailable) resolve(null);
+        else resolve(resp);
+      });
+      window.postMessage({ type: 'gsi-analyze-email', requestId, data: emailData, skipCache }, '*');
     });
   }
 

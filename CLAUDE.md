@@ -9,8 +9,8 @@ gmail-sender-info/
 ├── manifest.json           # Manifest V3
 ├── src/
 │   ├── content.js          # MutationObserver, tooltip, banner, logo fallback chain
-│   ├── background.js       # Service worker: BIMI DNS lookup, caching, AI analysis
-│   ├── page-fetch.js       # MAIN world: fetches raw headers using Gmail's session
+│   ├── background.js       # Service worker: BIMI DNS lookup, caching
+│   ├── page-fetch.js       # MAIN world: fetches raw headers, AI analysis (Gemini Nano)
 │   └── styles.css          # Styles for tooltip (#gsi-tooltip) and banner (#gsi-banner)
 ├── images/
 │   ├── icon.svg            # Source SVG for icon (512×512)
@@ -34,13 +34,13 @@ gmail-sender-info/
 
 **Background → Content:** `{ fullDomain, rootDomain, logoUrl, logoSource, faviconSubUrl, faviconRootUrl, countryCode, countryName, countryMethod }`
 
-**Content → Background:** `{ action: 'checkAiAvailable' }`
+**Content → MAIN world (postMessage):** `{ type: 'gsi-check-ai', requestId }`
 
-**Background → Content:** `{ available: true|false }`
+**MAIN world → Content:** `{ type: 'gsi-ai-available-result', requestId, available, hasApi, status }`
 
-**Content → Background:** `{ action: 'analyzeEmail', data: { displayName, senderEmail, subject, bodyText, links, isEmptyBody, recipientStatus, replyToMismatch } }`
+**Content → MAIN world (postMessage):** `{ type: 'gsi-analyze-email', requestId, data: { displayName, senderEmail, subject, bodyText, links, isEmptyBody, recipientStatus, replyToMismatch }, skipCache }`
 
-**Background → Content:** `{ verdict: 'Ok'|'Caution'|'Reject', reasons: [...] }` or `{ unavailable: true }`
+**MAIN world → Content:** `{ type: 'gsi-ai-analysis-result', requestId, verdict: 'Ok'|'Caution'|'Reject', reasons: [...] }` or `{ ..., unavailable: true }`
 
 ## Logo Resolution Chain
 
