@@ -260,7 +260,7 @@
         else if (authData) resolve({ authData });
         else resolve({ headers });
       }
-    } else if (type === 'gsi-ai-available-result' || type === 'gsi-ai-analysis-result') {
+    } else if (type === 'gsi-ai-available-result' || type === 'gsi-ai-analysis-result' || type === 'gsi-ai-download-result') {
       const resolve = pendingAiRequests.get(requestId);
       if (resolve) {
         pendingAiRequests.delete(requestId);
@@ -852,7 +852,7 @@
           pendingAiRequests.delete(requestId);
           resolve({ timeout: true });
         }
-      }, 30000);
+      }, 90000);
       pendingAiRequests.set(requestId, (resp) => {
         if (settled) return;
         settled = true;
@@ -1365,7 +1365,59 @@
     (async () => {
       const aiStatus = await checkAiAvailable();
 
-      if (!aiStatus.available) return;
+      // Always append AI diagnostics (handles race with debug section builder)
+      const aiDiagLines = [
+        '--- AI Availability ---',
+        `available: ${aiStatus.available}`,
+        `hasApi: ${aiStatus.hasApi}`,
+        `status: ${aiStatus.status}`,
+        `statusError: ${aiStatus.statusError || 'none'}`,
+        `createError: ${aiStatus.createError || 'none'}`,
+        `chromeVersion: ${aiStatus.chromeVersion}`,
+      ];
+      const debugEl = banner.querySelector('.gsi-debug-content');
+      if (debugEl) {
+        debugEl.textContent += '\n' + aiDiagLines.join('\n');
+      } else {
+        banner.__gsiAiDebug = aiDiagLines;
+      }
+
+      if (!aiStatus.available || aiStatus.status === 'downloading' || aiStatus.status === 'downloadable') {
+        aiLine.style.display = '';
+        aiLineText.classList.remove('gsi-ai-line-loading');
+        if (aiStatus.status === 'downloading' || aiStatus.status === 'downloadable') {
+          aiLineText.textContent = '';
+          const dlBtn = document.createElement('button');
+          dlBtn.type = 'button';
+          dlBtn.textContent = 'Set up AI safety check';
+          dlBtn.style.cssText = 'font-size:12px;padding:3px 12px;cursor:pointer;border:1px solid #1a73e8;border-radius:4px;background:#1a73e8;color:#fff;margin-left:6px;font-weight:500';
+          dlBtn.addEventListener('click', () => {
+            dlBtn.disabled = true;
+            dlBtn.style.opacity = '0.6';
+            dlBtn.textContent = 'Downloading model…';
+            const reqId = ++headerRequestId;
+            pendingAiRequests.set(reqId, (resp) => {
+              if (resp.ready) {
+                aiLineText.textContent = 'AI model ready ';
+                dlBtn.textContent = 'Activate';
+                dlBtn.disabled = false;
+                dlBtn.style.opacity = '1';
+                dlBtn.onclick = () => location.reload();
+              } else {
+                dlBtn.disabled = false;
+                dlBtn.style.opacity = '1';
+                dlBtn.textContent = 'Retry setup';
+                aiLineText.textContent = (resp.error || 'Download failed') + ' ';
+              }
+            });
+            window.postMessage({ type: 'gsi-download-ai', requestId: reqId }, '*');
+          });
+          aiLineText.appendChild(dlBtn);
+        } else {
+          aiLineText.textContent = 'AI safety check requires a browser restart to activate';
+        }
+        return;
+      }
 
       // Show Gemini icon in strip and AI summary line
       geminiIcon.style.display = '';
@@ -1464,8 +1516,8 @@
           // Update AI line with failure message
           aiLineText.classList.remove('gsi-ai-line-loading');
           aiLineText.textContent = result && result.timeout
-            ? 'AI analysis timed out'
-            : 'AI analysis unavailable';
+            ? 'AI safety check timed out — try restarting your browser'
+            : 'AI safety check unavailable';
 
           // Add retry button to AI line
           const refreshBtn = document.createElement('button');
@@ -1598,6 +1650,7 @@
       debugContent.classList.add('gsi-debug-content');
       // Build debug lines
       const debugLines = [
+        `GSI version: ${chrome.runtime.getManifest().version}`,
         `envelope: ${envelopeEmail || '(none)'} | X-Original-Sender: ${originalSender || '(not found)'} | path: ${result.authData ? 'HTML' : 'raw'}`,
       ];
 

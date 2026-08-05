@@ -176,7 +176,7 @@ async function checkAiAvailableLocal() {
       return false;
     }
     const status = await LanguageModel.availability();
-    aiAvailable = status !== 'unavailable';
+    aiAvailable = status === 'available';
     aiAvailableCheckedAt = Date.now();
     return aiAvailable;
   } catch {
@@ -186,14 +186,21 @@ async function checkAiAvailableLocal() {
   }
 }
 
+function withTimeout(promise, ms) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), ms)),
+  ]);
+}
+
 async function getAiSession() {
   if (aiSession) return aiSession;
   if (aiSessionPromise) return aiSessionPromise;
   aiSessionPromise = (async () => {
     try {
-      aiSession = await LanguageModel.create({
+      aiSession = await withTimeout(LanguageModel.create({
         initialPrompts: [{ role: 'system', content: AI_SYSTEM_PROMPT }],
-      });
+      }), 60000);
       return aiSession;
     } catch {
       aiAvailable = false;
@@ -287,13 +294,59 @@ window.addEventListener('message', async (event) => {
   if (event.source !== window) return;
   if (event.data?.type !== 'gsi-check-ai') return;
   const { requestId } = event.data;
-  const hasApi = typeof LanguageModel !== 'undefined';
+  const hasGlobal = typeof LanguageModel !== 'undefined';
+  const hasWindowAi = typeof window.ai?.languageModel !== 'undefined';
   let status = null;
-  if (hasApi) {
-    try { status = await LanguageModel.availability(); } catch { /* ignore */ }
+  let statusError = null;
+  let createError = null;
+  if (hasGlobal) {
+    try { status = await LanguageModel.availability(); } catch (e) { statusError = e.message; }
+  } else if (hasWindowAi) {
+    try { status = await window.ai.languageModel.availability(); } catch (e) { statusError = e.message; }
   }
-  const available = hasApi && status !== 'unavailable' && status !== null;
-  window.postMessage({ type: 'gsi-ai-available-result', requestId, available, hasApi, status }, '*');
+  // If availability says unavailable, try create() directly — it can trigger download
+  // and sometimes works when availability is stale
+  let available = (hasGlobal || hasWindowAi) && status === 'available';
+  if (!available && (hasGlobal || hasWindowAi) && status !== 'downloading' && status !== 'downloadable') {
+    try {
+      const testSession = hasGlobal
+        ? await LanguageModel.create({ initialPrompts: [{ role: 'system', content: 'test' }] })
+        : await window.ai.languageModel.create({ initialPrompts: [{ role: 'system', content: 'test' }] });
+      if (testSession) {
+        testSession.destroy();
+        available = true;
+        aiAvailable = true;
+        status = 'available (via create)';
+      }
+    } catch (e) { createError = e.message; }
+  }
+  const hasApi = hasGlobal || hasWindowAi;
+  console.log('[GSI] AI check:', { hasGlobal, hasWindowAi, status, statusError, createError, available });
+  window.postMessage({ type: 'gsi-ai-available-result', requestId, available, hasApi, status, statusError, createError }, '*');
+});
+
+// User-gesture-triggered download — Chrome requires a click to start the model download
+window.addEventListener('message', async (event) => {
+  if (event.source !== window) return;
+  if (event.data?.type !== 'gsi-download-ai') return;
+  const { requestId } = event.data;
+  try {
+    const session = await LanguageModel.create({
+      monitor(m) {
+        m.addEventListener('downloadprogress', (e) => {
+          console.log('[GSI] AI model download:', Math.round(e.loaded / e.total * 100) + '%');
+        });
+      },
+      initialPrompts: [{ role: 'system', content: 'test' }],
+    });
+    if (session) {
+      session.destroy();
+      aiAvailable = true;
+    }
+    window.postMessage({ type: 'gsi-ai-download-result', requestId, ready: true }, '*');
+  } catch (e) {
+    window.postMessage({ type: 'gsi-ai-download-result', requestId, ready: false, error: e.message }, '*');
+  }
 });
 
 window.addEventListener('message', async (event) => {
@@ -317,11 +370,11 @@ window.addEventListener('message', async (event) => {
   }
 
   async function runPrompt(session, retried) {
-    const clone = await session.clone();
+    const clone = await withTimeout(session.clone(), 30000);
     try {
       const userPrompt = buildAiUserPrompt(data);
       const t0 = Date.now();
-      const rawResponse = await clone.prompt(userPrompt);
+      const rawResponse = await withTimeout(clone.prompt(userPrompt), 60000);
       const durationMs = Date.now() - t0;
       const result = parseAiResult(rawResponse);
       const response = { ...result, debug: { rawResponse, userPrompt, durationMs, cached: false, retried } };
