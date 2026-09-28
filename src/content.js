@@ -1046,19 +1046,37 @@
     });
     stripRow.appendChild(logo);
 
-    // Domain
+    // Domain (links to Gmail search for from:@fullDomain)
     const domainSpan = document.createElement('span');
     domainSpan.classList.add('gsi-strip-domain');
-    domainSpan.textContent = info.fullDomain;
+    const domainLink = document.createElement('a');
+    domainLink.href = `https://mail.google.com/mail/u/0/#search/from%3A%40${encodeURIComponent(info.fullDomain)}`;
+    domainLink.target = '_top';
+    domainLink.textContent = info.fullDomain;
+    domainSpan.appendChild(domainLink);
     stripRow.appendChild(domainSpan);
 
-    // Root domain (if different)
+    // Root domain (if different, links to Gmail search for from:@rootDomain)
     if (info.rootDomain !== info.fullDomain) {
       const rootSpan = document.createElement('span');
       rootSpan.classList.add('gsi-strip-root');
-      rootSpan.textContent = `(${info.rootDomain})`;
+      const rootLink = document.createElement('a');
+      rootLink.href = `https://mail.google.com/mail/u/0/#search/from%3A%40${encodeURIComponent(info.rootDomain)}`;
+      rootLink.target = '_top';
+      rootLink.textContent = `(${info.rootDomain})`;
+      rootSpan.appendChild(rootLink);
       stripRow.appendChild(rootSpan);
     }
+
+    // External-link icon (opens root domain website in new tab)
+    const extLink = document.createElement('a');
+    extLink.classList.add('gsi-external-link');
+    extLink.href = `https://${info.rootDomain}`;
+    extLink.target = '_blank';
+    extLink.rel = 'noopener noreferrer';
+    extLink.title = info.rootDomain;
+    extLink.innerHTML = '<svg width="12" height="12" viewBox="0 0 16 16" fill="currentColor"><path d="M9 2h5v5l-2-2-3 3-2-2 3-3L9 2zM4 4h3v2H5v6h6v-2h2v3a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1z"/></svg>';
+    stripRow.appendChild(extLink);
 
     // Country flag (if available)
     if (info.countryCode) {
@@ -1821,17 +1839,34 @@
         }
 
         const domainEl = stripRowEl.querySelector('.gsi-strip-domain');
-        if (domainEl) domainEl.textContent = origInfo.fullDomain;
+        if (domainEl) {
+          const domainA = domainEl.querySelector('a');
+          if (domainA) {
+            domainA.textContent = origInfo.fullDomain;
+            domainA.href = `https://mail.google.com/mail/u/0/#search/from%3A%40${encodeURIComponent(origInfo.fullDomain)}`;
+          } else {
+            domainEl.textContent = origInfo.fullDomain;
+          }
+        }
 
         const rootEl = stripRowEl.querySelector('.gsi-strip-root');
         if (origInfo.rootDomain !== origInfo.fullDomain) {
           if (rootEl) {
-            rootEl.textContent = `(${origInfo.rootDomain})`;
+            const rootA = rootEl.querySelector('a');
+            if (rootA) {
+              rootA.textContent = `(${origInfo.rootDomain})`;
+              rootA.href = `https://mail.google.com/mail/u/0/#search/from%3A%40${encodeURIComponent(origInfo.rootDomain)}`;
+            } else {
+              rootEl.textContent = `(${origInfo.rootDomain})`;
+            }
           } else {
             const newRoot = document.createElement('span');
             newRoot.classList.add('gsi-strip-root');
-            newRoot.textContent = `(${origInfo.rootDomain})`;
-            // Insert after domain span
+            const newRootLink = document.createElement('a');
+            newRootLink.href = `https://mail.google.com/mail/u/0/#search/from%3A%40${encodeURIComponent(origInfo.rootDomain)}`;
+            newRootLink.target = '_top';
+            newRootLink.textContent = `(${origInfo.rootDomain})`;
+            newRoot.appendChild(newRootLink);
             if (domainEl && domainEl.nextSibling) {
               stripRowEl.insertBefore(newRoot, domainEl.nextSibling);
             } else {
@@ -1840,6 +1875,13 @@
           }
         } else if (rootEl) {
           rootEl.remove();
+        }
+
+        // Update external-link icon to point to original root domain
+        const extLinkEl = stripRowEl.querySelector('.gsi-external-link');
+        if (extLinkEl) {
+          extLinkEl.href = `https://${origInfo.rootDomain}`;
+          extLinkEl.title = origInfo.rootDomain;
         }
 
         const groupDomain = envelopeEmail.split('@')[1];
