@@ -1050,7 +1050,7 @@
     const domainSpan = document.createElement('span');
     domainSpan.classList.add('gsi-strip-domain');
     const domainLink = document.createElement('a');
-    domainLink.href = `https://mail.google.com/mail/u/0/#search/from%3A%40${encodeURIComponent(info.fullDomain)}`;
+    domainLink.href = `https://mail.google.com/mail/u/0/#search/from%3A*${encodeURIComponent(info.fullDomain)}`;
     domainLink.target = '_top';
     domainLink.textContent = info.fullDomain;
     domainSpan.appendChild(domainLink);
@@ -1061,7 +1061,7 @@
       const rootSpan = document.createElement('span');
       rootSpan.classList.add('gsi-strip-root');
       const rootLink = document.createElement('a');
-      rootLink.href = `https://mail.google.com/mail/u/0/#search/from%3A%40${encodeURIComponent(info.rootDomain)}`;
+      rootLink.href = `https://mail.google.com/mail/u/0/#search/from%3A*${encodeURIComponent(info.rootDomain)}`;
       rootLink.target = '_top';
       rootLink.textContent = `(${info.rootDomain})`;
       rootSpan.appendChild(rootLink);
@@ -1843,7 +1843,7 @@
           const domainA = domainEl.querySelector('a');
           if (domainA) {
             domainA.textContent = origInfo.fullDomain;
-            domainA.href = `https://mail.google.com/mail/u/0/#search/from%3A%40${encodeURIComponent(origInfo.fullDomain)}`;
+            domainA.href = `https://mail.google.com/mail/u/0/#search/from%3A*${encodeURIComponent(origInfo.fullDomain)}`;
           } else {
             domainEl.textContent = origInfo.fullDomain;
           }
@@ -1855,7 +1855,7 @@
             const rootA = rootEl.querySelector('a');
             if (rootA) {
               rootA.textContent = `(${origInfo.rootDomain})`;
-              rootA.href = `https://mail.google.com/mail/u/0/#search/from%3A%40${encodeURIComponent(origInfo.rootDomain)}`;
+              rootA.href = `https://mail.google.com/mail/u/0/#search/from%3A*${encodeURIComponent(origInfo.rootDomain)}`;
             } else {
               rootEl.textContent = `(${origInfo.rootDomain})`;
             }
@@ -1863,7 +1863,7 @@
             const newRoot = document.createElement('span');
             newRoot.classList.add('gsi-strip-root');
             const newRootLink = document.createElement('a');
-            newRootLink.href = `https://mail.google.com/mail/u/0/#search/from%3A%40${encodeURIComponent(origInfo.rootDomain)}`;
+            newRootLink.href = `https://mail.google.com/mail/u/0/#search/from%3A*${encodeURIComponent(origInfo.rootDomain)}`;
             newRootLink.target = '_top';
             newRootLink.textContent = `(${origInfo.rootDomain})`;
             newRoot.appendChild(newRootLink);
