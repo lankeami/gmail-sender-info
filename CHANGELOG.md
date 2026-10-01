@@ -2,6 +2,7 @@
 
 ## 2026-10-01
 
+- [9e9d4be](https://github.com/lankeami/gmail-sender-info/commit/9e9d4beee8850267f786b50dec4e1057bd17acca) Keep exact from:@ search for full domain; wildcard only for root domain
 - [8400b3e](https://github.com/lankeami/gmail-sender-info/commit/8400b3ed535674336f82684e4d7048c6691f4250) Use from:*domain in Gmail search links to match subdomains and prefixes
 
 ## 2026-09-28
