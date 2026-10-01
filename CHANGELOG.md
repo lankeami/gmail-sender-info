@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-10-01
+
+- [8400b3e](https://github.com/lankeami/gmail-sender-info/commit/8400b3ed535674336f82684e4d7048c6691f4250) Use from:*domain in Gmail search links to match subdomains and prefixes
+
 ## 2026-09-28
 
 - [93dc51e](https://github.com/lankeami/gmail-sender-info/commit/93dc51e3899820d6481374cb1fcdeff8e31d4b4a) Add clickable domain links and external site icon to banner strip
