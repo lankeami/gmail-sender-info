@@ -1050,7 +1050,7 @@
     const domainSpan = document.createElement('span');
     domainSpan.classList.add('gsi-strip-domain');
     const domainLink = document.createElement('a');
-    domainLink.href = `https://mail.google.com/mail/u/0/#search/from%3A*${encodeURIComponent(info.fullDomain)}`;
+    domainLink.href = `https://mail.google.com/mail/u/0/#search/from%3A%40${encodeURIComponent(info.fullDomain)}`;
     domainLink.target = '_top';
     domainLink.textContent = info.fullDomain;
     domainSpan.appendChild(domainLink);
@@ -1843,7 +1843,7 @@
           const domainA = domainEl.querySelector('a');
           if (domainA) {
             domainA.textContent = origInfo.fullDomain;
-            domainA.href = `https://mail.google.com/mail/u/0/#search/from%3A*${encodeURIComponent(origInfo.fullDomain)}`;
+            domainA.href = `https://mail.google.com/mail/u/0/#search/from%3A%40${encodeURIComponent(origInfo.fullDomain)}`;
           } else {
             domainEl.textContent = origInfo.fullDomain;
           }
