@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-10-01
+
+- [9e9d4be](https://github.com/lankeami/gmail-sender-info/commit/9e9d4beee8850267f786b50dec4e1057bd17acca) Keep exact from:@ search for full domain; wildcard only for root domain
+- [8400b3e](https://github.com/lankeami/gmail-sender-info/commit/8400b3ed535674336f82684e4d7048c6691f4250) Use from:*domain in Gmail search links to match subdomains and prefixes
+
+## 2026-09-28
+
+- [93dc51e](https://github.com/lankeami/gmail-sender-info/commit/93dc51e3899820d6481374cb1fcdeff8e31d4b4a) Add clickable domain links and external site icon to banner strip
+  Full domain and root domain text now link to Gmail searches for from:@domain, and a small external-link icon opens the root domain website in a new tab. Mailing-list domain restore logic updated to preserve link hrefs.
+
 ## 2026-08-05
 
 - [d30563a](https://github.com/lankeami/gmail-sender-info/commit/d30563af0ad6678b5d99f129cf5f240e4ce963eb) chore: release v20260805.1956
