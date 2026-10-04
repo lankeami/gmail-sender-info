@@ -22,8 +22,10 @@ function parseAuthResults(headerText) {
   const VALUES = '(pass|fail|softfail|neutral|none|temperror|permerror|bestguesspass)';
   const segments = authLine.includes(';') ? authLine.split(';').map(s => s.trim()) : [authLine];
 
-  for (const seg of segments) {
-    const gwSpf = seg.match(new RegExp('(?:^|\\s)gateway\\.spf=' + VALUES, 'i'));
+  for (const rawSeg of segments) {
+    const seg = rawSeg.replace(/"[^"]*"/g, '');
+
+    const gwSpf = seg.match(new RegExp('(?:^|\\s)gateway\\.spf=' + VALUES + '\\b', 'i'));
     if (gwSpf) { results.gatewaySpf = gwSpf[1].toLowerCase(); }
 
     const spf = seg.match(new RegExp('(?:^|\\s)spf=' + VALUES + '\\b', 'i'));
@@ -160,10 +162,22 @@ assert('only gatewaySpf → non-null result', t10, { gatewaySpf: 'pass' });
 const t11 = parseAuthResults('Authentication-Results: mx.google.com;\r\n\tspf=pass;\r\n\tdkim=fail');
 assert('folded multiline header', t11, { spf: 'pass', dkim: 'fail' });
 
-// spf= inside reason string should not match (Copilot item 1)
+// spf= inside reason string should not match
 const t12 = parseAuthResults('Authentication-Results: mx.google.com; foo=pass reason="spf=pass"; dkim=pass; dmarc=pass');
 assertNoKey('spf inside reason string should not set spf key', t12, 'spf');
 assert('reason string spf excluded, dkim/dmarc kept', t12, { dkim: 'pass', dmarc: 'pass' });
+
+// Quoted reason with spaces before method names should not match
+const t13 = parseAuthResults('Authentication-Results: mx.google.com; foo=pass reason="policy says spf=pass dkim=pass dmarc=pass"');
+assertNoKey('quoted reason with spaces: no spf', t13, 'spf');
+assertNoKey('quoted reason with spaces: no dkim', t13, 'dkim');
+assertNoKey('quoted reason with spaces: no dmarc', t13, 'dmarc');
+assert('quoted reason with spaces: null result', t13, null);
+
+// gateway.spf=passive should not match as pass (missing \b)
+const t14 = parseAuthResults('Authentication-Results: mx.google.com; gateway.spf=passive; dkim=pass');
+assertNoKey('gateway.spf=passive should not set gatewaySpf', t14, 'gatewaySpf');
+assert('gateway.spf=passive excluded, only dkim kept', t14, { dkim: 'pass' });
 
 // --- parseAuthResultsHtml tests (HTML "Show Original" path) ---
 console.log('\n=== parseAuthResultsHtml (HTML path) ===');

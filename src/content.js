@@ -312,8 +312,10 @@
     const VALUES = '(pass|fail|softfail|neutral|none|temperror|permerror|bestguesspass)';
     const segments = authLine.includes(';') ? authLine.split(';').map(s => s.trim()) : [authLine];
 
-    for (const seg of segments) {
-      const gwSpf = seg.match(new RegExp('(?:^|\\s)gateway\\.spf=' + VALUES, 'i'));
+    for (const rawSeg of segments) {
+      const seg = rawSeg.replace(/"[^"]*"/g, '');
+
+      const gwSpf = seg.match(new RegExp('(?:^|\\s)gateway\\.spf=' + VALUES + '\\b', 'i'));
       if (gwSpf) { results.gatewaySpf = gwSpf[1].toLowerCase(); }
 
       const spf = seg.match(new RegExp('(?:^|\\s)spf=' + VALUES + '\\b', 'i'));
