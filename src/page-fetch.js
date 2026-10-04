@@ -71,14 +71,18 @@ window.addEventListener('message', async (event) => {
     if (headers.trimStart().startsWith('<')) {
       const stripped = text.replace(/<[^>]*>/g, ' ').replace(/&nbsp;/g, ' ').replace(/&#39;/g, "'").replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#(\d+);/g, (_, n) => String.fromCharCode(parseInt(n)));
       const authData = {};
+      const HTML_VALUES = '(PASS|FAIL|SOFTFAIL|NEUTRAL|NONE|TEMPERROR|PERMERROR|BESTGUESSPASS)';
 
-      const spfMatch = stripped.match(/\bSPF:\s*'?(PASS|FAIL|SOFTFAIL|NEUTRAL|NONE|TEMPERROR|PERMERROR)\b/i);
+      const gwSpfMatch = stripped.match(new RegExp('\\bGateway\\s+SPF:\\s*\'?' + HTML_VALUES, 'i'));
+      if (gwSpfMatch) authData.gatewaySpf = gwSpfMatch[1].toLowerCase();
+
+      const spfMatch = stripped.match(new RegExp('(?<!Gateway\\s)(?<!\\w)SPF:\\s*\'?' + HTML_VALUES, 'i'));
       if (spfMatch) authData.spf = spfMatch[1].toLowerCase();
 
-      const dkimMatch = stripped.match(/\bDKIM:\s*'?(PASS|FAIL|NEUTRAL|NONE|TEMPERROR|PERMERROR)\b/i);
+      const dkimMatch = stripped.match(new RegExp('\\bDKIM:\\s*\'?' + HTML_VALUES, 'i'));
       if (dkimMatch) authData.dkim = dkimMatch[1].toLowerCase();
 
-      const dmarcMatch = stripped.match(/\bDMARC:\s*'?(PASS|FAIL|BESTGUESSPASS|NONE|TEMPERROR|PERMERROR)\b/i);
+      const dmarcMatch = stripped.match(new RegExp('\\bDMARC:\\s*\'?' + HTML_VALUES, 'i'));
       if (dmarcMatch) authData.dmarc = dmarcMatch[1].toLowerCase();
 
       const origSenderMatch = stripped.match(/X-Original-Sender[:\s]+([^\s<]+@[^\s>]+)/i);
@@ -244,6 +248,9 @@ function buildAiUserPrompt(data) {
   }
   if (data.auth) {
     lines.push(`Authentication: SPF=${data.auth.spf || 'unknown'}, DKIM=${data.auth.dkim || 'unknown'}, DMARC=${data.auth.dmarc || 'unknown'}`);
+    if (!data.auth.spf && data.auth.gatewaySpf) {
+      lines.push(`Note: SPF result is from a gateway relay allow-list (gateway.spf=${data.auth.gatewaySpf}), not direct sender authentication. Treat SPF as unknown for trust evaluation.`);
+    }
   }
   if (data.links && data.links.length > 0) {
     lines.push('Links in email:');
