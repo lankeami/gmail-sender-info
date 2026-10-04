@@ -130,6 +130,32 @@ assertNoKey('arc.spf should not create any key', t4, 'arcSpf');
 const t5 = parseAuthResults('Subject: Hello');
 assert('no auth header → null', t5, null);
 
+// No semicolons with gateway.spf (space-separated fallback)
+const t6 = parseAuthResults('Authentication-Results: mx.google.com; gateway.spf=pass dkim=pass dmarc=pass');
+assertNoKey('no-semicolon gateway.spf should not set spf key', t6, 'spf');
+assert('no-semicolon gateway.spf parsed correctly', t6, { gatewaySpf: 'pass', dkim: 'pass', dmarc: 'pass' });
+
+// i.spf prefix excluded
+const t7 = parseAuthResults('Authentication-Results: mx.google.com; i.spf=pass; dkim=pass');
+assertNoKey('i.spf should not set spf key', t7, 'spf');
+assert('i.spf excluded, only dkim kept', t7, { dkim: 'pass' });
+
+// softfail and bestguesspass values
+const t8 = parseAuthResults('Authentication-Results: mx.google.com; spf=softfail; dmarc=bestguesspass');
+assert('softfail and bestguesspass parsed', t8, { spf: 'softfail', dmarc: 'bestguesspass' });
+
+// Case insensitivity
+const t9 = parseAuthResults('Authentication-Results: mx.google.com; SPF=Pass; DKIM=FAIL');
+assert('case insensitive values', t9, { spf: 'pass', dkim: 'fail' });
+
+// Only gatewaySpf present returns non-null
+const t10 = parseAuthResults('Authentication-Results: mx.google.com; gateway.spf=pass');
+assert('only gatewaySpf → non-null result', t10, { gatewaySpf: 'pass' });
+
+// Folded (multiline) header
+const t11 = parseAuthResults('Authentication-Results: mx.google.com;\r\n\tspf=pass;\r\n\tdkim=fail');
+assert('folded multiline header', t11, { spf: 'pass', dkim: 'fail' });
+
 // --- parseAuthResultsHtml tests (HTML "Show Original" path) ---
 console.log('\n=== parseAuthResultsHtml (HTML path) ===');
 
