@@ -26,15 +26,13 @@ function parseAuthResults(headerText) {
     const gwSpf = seg.match(new RegExp('(?:^|\\s)gateway\\.spf=' + VALUES, 'i'));
     if (gwSpf) { results.gatewaySpf = gwSpf[1].toLowerCase(); }
 
-    if (/^(arc|i)\.\w+=/i.test(seg)) continue;
-
-    const spf = seg.match(new RegExp('(?<![.\\w])spf=' + VALUES, 'i'));
+    const spf = seg.match(new RegExp('(?:^|\\s)spf=' + VALUES + '\\b', 'i'));
     if (spf) results.spf = spf[1].toLowerCase();
 
-    const dkim = seg.match(new RegExp('(?:^|\\s)dkim=' + VALUES, 'i'));
+    const dkim = seg.match(new RegExp('(?:^|\\s)dkim=' + VALUES + '\\b', 'i'));
     if (dkim) results.dkim = dkim[1].toLowerCase();
 
-    const dmarc = seg.match(new RegExp('(?:^|\\s)dmarc=' + VALUES, 'i'));
+    const dmarc = seg.match(new RegExp('(?:^|\\s)dmarc=' + VALUES + '\\b', 'i'));
     if (dmarc) results.dmarc = dmarc[1].toLowerCase();
   }
 
@@ -46,16 +44,17 @@ function parseAuthResultsHtml(stripped) {
   const authData = {};
   const VALUES = '(PASS|FAIL|SOFTFAIL|NEUTRAL|NONE|TEMPERROR|PERMERROR|BESTGUESSPASS)';
 
-  const gwSpfMatch = stripped.match(new RegExp('\\bGateway\\s+SPF:\\s*\'?' + VALUES, 'i'));
+  const gwSpfMatch = stripped.match(new RegExp('\\bGateway\\s+SPF:\\s*\'?' + VALUES + '\\b', 'i'));
   if (gwSpfMatch) authData.gatewaySpf = gwSpfMatch[1].toLowerCase();
 
-  const spfMatch = stripped.match(new RegExp('(?<!Gateway\\s)(?<!\\w)SPF:\\s*\'?' + VALUES, 'i'));
+  const spfSource = gwSpfMatch ? stripped.slice(0, gwSpfMatch.index) + stripped.slice(gwSpfMatch.index + gwSpfMatch[0].length) : stripped;
+  const spfMatch = spfSource.match(new RegExp('(?<!\\w)SPF:\\s*\'?' + VALUES + '\\b', 'i'));
   if (spfMatch) authData.spf = spfMatch[1].toLowerCase();
 
-  const dkimMatch = stripped.match(new RegExp('\\bDKIM:\\s*\'?' + VALUES, 'i'));
+  const dkimMatch = stripped.match(new RegExp('\\bDKIM:\\s*\'?' + VALUES + '\\b', 'i'));
   if (dkimMatch) authData.dkim = dkimMatch[1].toLowerCase();
 
-  const dmarcMatch = stripped.match(new RegExp('\\bDMARC:\\s*\'?' + VALUES, 'i'));
+  const dmarcMatch = stripped.match(new RegExp('\\bDMARC:\\s*\'?' + VALUES + '\\b', 'i'));
   if (dmarcMatch) authData.dmarc = dmarcMatch[1].toLowerCase();
 
   return Object.keys(authData).length > 0 ? authData : null;
@@ -135,10 +134,15 @@ const t6 = parseAuthResults('Authentication-Results: mx.google.com; gateway.spf=
 assertNoKey('no-semicolon gateway.spf should not set spf key', t6, 'spf');
 assert('no-semicolon gateway.spf parsed correctly', t6, { gatewaySpf: 'pass', dkim: 'pass', dmarc: 'pass' });
 
-// i.spf prefix excluded
+// i.spf prefix excluded (semicolon-separated)
 const t7 = parseAuthResults('Authentication-Results: mx.google.com; i.spf=pass; dkim=pass');
 assertNoKey('i.spf should not set spf key', t7, 'spf');
 assert('i.spf excluded, only dkim kept', t7, { dkim: 'pass' });
+
+// i.spf in space-separated fallback should not drop dkim/dmarc
+const t7b = parseAuthResults('Authentication-Results: mx.google.com; i.spf=pass dkim=pass dmarc=fail');
+assertNoKey('space-sep i.spf should not set spf key', t7b, 'spf');
+assert('space-sep i.spf: dkim/dmarc still parsed', t7b, { dkim: 'pass', dmarc: 'fail' });
 
 // softfail and bestguesspass values
 const t8 = parseAuthResults('Authentication-Results: mx.google.com; spf=softfail; dmarc=bestguesspass');
@@ -156,6 +160,11 @@ assert('only gatewaySpf → non-null result', t10, { gatewaySpf: 'pass' });
 const t11 = parseAuthResults('Authentication-Results: mx.google.com;\r\n\tspf=pass;\r\n\tdkim=fail');
 assert('folded multiline header', t11, { spf: 'pass', dkim: 'fail' });
 
+// spf= inside reason string should not match (Copilot item 1)
+const t12 = parseAuthResults('Authentication-Results: mx.google.com; foo=pass reason="spf=pass"; dkim=pass; dmarc=pass');
+assertNoKey('spf inside reason string should not set spf key', t12, 'spf');
+assert('reason string spf excluded, dkim/dmarc kept', t12, { dkim: 'pass', dmarc: 'pass' });
+
 // --- parseAuthResultsHtml tests (HTML "Show Original" path) ---
 console.log('\n=== parseAuthResultsHtml (HTML path) ===');
 
@@ -168,6 +177,16 @@ assert('html gateway SPF → gatewaySpf', h2, { gatewaySpf: 'pass', dkim: 'pass'
 
 const h3 = parseAuthResultsHtml("Gateway SPF: PASS SPF: NONE DKIM: 'PASS'");
 assert('html gateway SPF + plain SPF coexist', h3, { gatewaySpf: 'pass', spf: 'none', dkim: 'pass' });
+
+// Word boundary: PASSIVE should not match as PASS (Copilot item 2)
+const h4 = parseAuthResultsHtml("SPF: PASSIVE DKIM: 'PASS'");
+assertNoKey('PASSIVE should not match as SPF pass', h4, 'spf');
+assert('PASSIVE excluded, only dkim kept', h4, { dkim: 'pass' });
+
+// Multi-space "Gateway   SPF:" should not also set spf
+const h5 = parseAuthResultsHtml("Gateway   SPF: PASS DKIM: 'PASS'");
+assertNoKey('multi-space gateway SPF should not set spf key', h5, 'spf');
+assert('multi-space gateway SPF parsed correctly', h5, { gatewaySpf: 'pass', dkim: 'pass' });
 
 // --- Summary ---
 console.log(`\n${passed} passed, ${failed} failed`);

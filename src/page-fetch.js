@@ -73,16 +73,17 @@ window.addEventListener('message', async (event) => {
       const authData = {};
       const HTML_VALUES = '(PASS|FAIL|SOFTFAIL|NEUTRAL|NONE|TEMPERROR|PERMERROR|BESTGUESSPASS)';
 
-      const gwSpfMatch = stripped.match(new RegExp('\\bGateway\\s+SPF:\\s*\'?' + HTML_VALUES, 'i'));
+      const gwSpfMatch = stripped.match(new RegExp('\\bGateway\\s+SPF:\\s*\'?' + HTML_VALUES + '\\b', 'i'));
       if (gwSpfMatch) authData.gatewaySpf = gwSpfMatch[1].toLowerCase();
 
-      const spfMatch = stripped.match(new RegExp('(?<!Gateway\\s)(?<!\\w)SPF:\\s*\'?' + HTML_VALUES, 'i'));
+      const spfSource = gwSpfMatch ? stripped.slice(0, gwSpfMatch.index) + stripped.slice(gwSpfMatch.index + gwSpfMatch[0].length) : stripped;
+      const spfMatch = spfSource.match(new RegExp('(?<!\\w)SPF:\\s*\'?' + HTML_VALUES + '\\b', 'i'));
       if (spfMatch) authData.spf = spfMatch[1].toLowerCase();
 
-      const dkimMatch = stripped.match(new RegExp('\\bDKIM:\\s*\'?' + HTML_VALUES, 'i'));
+      const dkimMatch = stripped.match(new RegExp('\\bDKIM:\\s*\'?' + HTML_VALUES + '\\b', 'i'));
       if (dkimMatch) authData.dkim = dkimMatch[1].toLowerCase();
 
-      const dmarcMatch = stripped.match(new RegExp('\\bDMARC:\\s*\'?' + HTML_VALUES, 'i'));
+      const dmarcMatch = stripped.match(new RegExp('\\bDMARC:\\s*\'?' + HTML_VALUES + '\\b', 'i'));
       if (dmarcMatch) authData.dmarc = dmarcMatch[1].toLowerCase();
 
       const origSenderMatch = stripped.match(/X-Original-Sender[:\s]+([^\s<]+@[^\s>]+)/i);

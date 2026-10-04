@@ -316,15 +316,13 @@
       const gwSpf = seg.match(new RegExp('(?:^|\\s)gateway\\.spf=' + VALUES, 'i'));
       if (gwSpf) { results.gatewaySpf = gwSpf[1].toLowerCase(); }
 
-      if (/^(arc|i)\.\w+=/i.test(seg)) continue;
-
-      const spf = seg.match(new RegExp('(?<![.\\w])spf=' + VALUES, 'i'));
+      const spf = seg.match(new RegExp('(?:^|\\s)spf=' + VALUES + '\\b', 'i'));
       if (spf) results.spf = spf[1].toLowerCase();
 
-      const dkim = seg.match(new RegExp('(?:^|\\s)dkim=' + VALUES, 'i'));
+      const dkim = seg.match(new RegExp('(?:^|\\s)dkim=' + VALUES + '\\b', 'i'));
       if (dkim) results.dkim = dkim[1].toLowerCase();
 
-      const dmarc = seg.match(new RegExp('(?:^|\\s)dmarc=' + VALUES, 'i'));
+      const dmarc = seg.match(new RegExp('(?:^|\\s)dmarc=' + VALUES + '\\b', 'i'));
       if (dmarc) results.dmarc = dmarc[1].toLowerCase();
     }
 
