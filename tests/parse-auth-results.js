@@ -1,66 +1,38 @@
 /**
- * Assertion script for parseAuthResults().
- * Copies the function from content.js for isolated testing.
+ * Assertion script for Authentication-Results parsing.
+ * Extracts parseAuthResults() from src/content.js and parseAuthResultsHtml()
+ * from src/page-fetch.js at runtime, so the tests exercise the shipped code
+ * rather than a hand-maintained copy that can drift.
  * Run: node tests/parse-auth-results.js
  */
 
-// --- Copy of parseAuthResults from content.js (post-refactor) ---
-function parseAuthResults(headerText) {
-  const unfolded = headerText.replace(/\r?\n[ \t]+/g, ' ');
-  const lines = unfolded.split(/\r?\n/);
+const fs = require('fs');
+const path = require('path');
 
-  let authLine = '';
-  for (const line of lines) {
-    if (line.toLowerCase().startsWith('authentication-results:')) {
-      authLine = line.substring('authentication-results:'.length).trim();
-      break;
+// Brace-matching extraction. Assumes the function body contains no unbalanced
+// braces inside string/regex literals (true for both parsers); extraction
+// failures throw loudly rather than silently testing stale logic.
+function extractFunction(filePath, name) {
+  const source = fs.readFileSync(filePath, 'utf8');
+  const marker = `function ${name}(`;
+  const start = source.indexOf(marker);
+  if (start === -1) throw new Error(`${name} not found in ${filePath}`);
+  let depth = 0;
+  for (let i = source.indexOf('{', start); i < source.length; i++) {
+    if (source[i] === '{') depth++;
+    else if (source[i] === '}') {
+      depth--;
+      if (depth === 0) return source.slice(start, i + 1);
     }
   }
-  if (!authLine) return null;
-
-  const results = {};
-  const VALUES = '(pass|fail|softfail|neutral|none|temperror|permerror|bestguesspass)';
-  const segments = authLine.includes(';') ? authLine.split(';').map(s => s.trim()) : [authLine];
-
-  for (const rawSeg of segments) {
-    const seg = rawSeg.replace(/"[^"]*"/g, '');
-
-    const gwSpf = seg.match(new RegExp('(?:^|\\s)gateway\\.spf=' + VALUES + '\\b', 'i'));
-    if (gwSpf) { results.gatewaySpf = gwSpf[1].toLowerCase(); }
-
-    const spf = seg.match(new RegExp('(?:^|\\s)spf=' + VALUES + '\\b', 'i'));
-    if (spf) results.spf = spf[1].toLowerCase();
-
-    const dkim = seg.match(new RegExp('(?:^|\\s)dkim=' + VALUES + '\\b', 'i'));
-    if (dkim) results.dkim = dkim[1].toLowerCase();
-
-    const dmarc = seg.match(new RegExp('(?:^|\\s)dmarc=' + VALUES + '\\b', 'i'));
-    if (dmarc) results.dmarc = dmarc[1].toLowerCase();
-  }
-
-  return Object.keys(results).length > 0 ? results : null;
+  throw new Error(`Unbalanced braces extracting ${name} from ${filePath}`);
 }
 
-// --- Copy of parseAuthResultsHtml from page-fetch.js (post-refactor) ---
-function parseAuthResultsHtml(stripped) {
-  const authData = {};
-  const VALUES = '(PASS|FAIL|SOFTFAIL|NEUTRAL|NONE|TEMPERROR|PERMERROR|BESTGUESSPASS)';
-
-  const gwSpfMatch = stripped.match(new RegExp('\\bGateway\\s+SPF:\\s*\'?' + VALUES + '\\b', 'i'));
-  if (gwSpfMatch) authData.gatewaySpf = gwSpfMatch[1].toLowerCase();
-
-  const spfSource = gwSpfMatch ? stripped.slice(0, gwSpfMatch.index) + stripped.slice(gwSpfMatch.index + gwSpfMatch[0].length) : stripped;
-  const spfMatch = spfSource.match(new RegExp('(?<!\\w)SPF:\\s*\'?' + VALUES + '\\b', 'i'));
-  if (spfMatch) authData.spf = spfMatch[1].toLowerCase();
-
-  const dkimMatch = stripped.match(new RegExp('\\bDKIM:\\s*\'?' + VALUES + '\\b', 'i'));
-  if (dkimMatch) authData.dkim = dkimMatch[1].toLowerCase();
-
-  const dmarcMatch = stripped.match(new RegExp('\\bDMARC:\\s*\'?' + VALUES + '\\b', 'i'));
-  if (dmarcMatch) authData.dmarc = dmarcMatch[1].toLowerCase();
-
-  return Object.keys(authData).length > 0 ? authData : null;
-}
+// eval is safe here: input is this repo's own committed source, read from
+// disk in a local test harness — never remote or user-supplied data.
+const srcDir = path.join(__dirname, '..', 'src');
+const parseAuthResults = eval('(' + extractFunction(path.join(srcDir, 'content.js'), 'parseAuthResults') + ')');
+const parseAuthResultsHtml = eval('(' + extractFunction(path.join(srcDir, 'page-fetch.js'), 'parseAuthResultsHtml') + ')');
 
 // --- Test helpers ---
 let passed = 0;
@@ -146,7 +118,7 @@ const t7b = parseAuthResults('Authentication-Results: mx.google.com; i.spf=pass 
 assertNoKey('space-sep i.spf should not set spf key', t7b, 'spf');
 assert('space-sep i.spf: dkim/dmarc still parsed', t7b, { dkim: 'pass', dmarc: 'fail' });
 
-// softfail and bestguesspass values
+// softfail and bestguesspass values (valid for spf and dmarc respectively)
 const t8 = parseAuthResults('Authentication-Results: mx.google.com; spf=softfail; dmarc=bestguesspass');
 assert('softfail and bestguesspass parsed', t8, { spf: 'softfail', dmarc: 'bestguesspass' });
 
@@ -192,7 +164,7 @@ assert('html gateway SPF → gatewaySpf', h2, { gatewaySpf: 'pass', dkim: 'pass'
 const h3 = parseAuthResultsHtml("Gateway SPF: PASS SPF: NONE DKIM: 'PASS'");
 assert('html gateway SPF + plain SPF coexist', h3, { gatewaySpf: 'pass', spf: 'none', dkim: 'pass' });
 
-// Word boundary: PASSIVE should not match as PASS (Copilot item 2)
+// Word boundary: PASSIVE should not match as PASS
 const h4 = parseAuthResultsHtml("SPF: PASSIVE DKIM: 'PASS'");
 assertNoKey('PASSIVE should not match as SPF pass', h4, 'spf');
 assert('PASSIVE excluded, only dkim kept', h4, { dkim: 'pass' });
@@ -201,6 +173,64 @@ assert('PASSIVE excluded, only dkim kept', h4, { dkim: 'pass' });
 const h5 = parseAuthResultsHtml("Gateway   SPF: PASS DKIM: 'PASS'");
 assertNoKey('multi-space gateway SPF should not set spf key', h5, 'spf');
 assert('multi-space gateway SPF parsed correctly', h5, { gatewaySpf: 'pass', dkim: 'pass' });
+
+// --- Quoted strings and comments (RFC 7601 CFWS) ---
+console.log('\n=== quoted strings and comments ===');
+
+// Semicolon inside a quoted reason must not sever the quote pair
+const q1 = parseAuthResults('Authentication-Results: mx.google.com; foo=pass reason="policy; spf=pass"; dkim=pass');
+assertNoKey('semicolon inside quoted reason: no spf', q1, 'spf');
+assert('semicolon inside quoted reason: dkim kept', q1, { dkim: 'pass' });
+
+// Parenthesized comments must not be parsed as results
+const q2 = parseAuthResults('Authentication-Results: mx.google.com; x-custom=pass (upstream said spf=pass earlier); dkim=pass');
+assertNoKey('comment injection: no spf', q2, 'spf');
+assert('comment injection: dkim kept', q2, { dkim: 'pass' });
+
+// Nested comments
+const q3 = parseAuthResults('Authentication-Results: mx.google.com; foo=pass (outer (inner spf=pass) text); dkim=pass');
+assertNoKey('nested comment injection: no spf', q3, 'spf');
+
+// Real-world Gmail comment placement still parses (regression guard)
+const q4 = parseAuthResults('Authentication-Results: mx.google.com; spf=pass (google.com: domain of a@b.com designates 1.2.3.4 as permitted sender) smtp.mailfrom=a@b.com; dkim=pass');
+assert('real-world comment: spf still parsed', q4, { spf: 'pass', dkim: 'pass' });
+
+// Unterminated quote: do not parse its contents as results
+const q5 = parseAuthResults('Authentication-Results: mx.google.com; foo=pass reason="unterminated spf=pass dkim=pass');
+assertNoKey('unterminated quote: no spf', q5, 'spf');
+assertNoKey('unterminated quote: no dkim', q5, 'dkim');
+
+// --- Repeated methods: first result wins (pre-refactor behavior) ---
+console.log('\n=== repeated methods ===');
+
+const r1 = parseAuthResults('Authentication-Results: mx.google.com; dkim=pass header.i=@esp.example; dkim=fail header.i=@customer.example; spf=pass; dmarc=pass');
+assert('repeated dkim: first result wins', r1, { dkim: 'pass', spf: 'pass', dmarc: 'pass' });
+
+const r2 = parseAuthResults('Authentication-Results: mx.google.com; spf=fail smtp.mailfrom=a.com; x=y spf=pass smtp.helo=b.com');
+assert('repeated spf: first result wins', r2, { spf: 'fail' });
+
+// --- Per-method value lists (match pre-refactor behavior) ---
+console.log('\n=== per-method value lists ===');
+
+const v1 = parseAuthResults('Authentication-Results: mx.google.com; dkim=softfail; dmarc=softfail; spf=bestguesspass');
+assert('nonstandard per-method values rejected', v1, null);
+
+const v2 = parseAuthResultsHtml('DKIM: SOFTFAIL DMARC: SOFTFAIL SPF: BESTGUESSPASS');
+assert('html nonstandard per-method values rejected', v2, {});
+
+// --- HTML path: Received-SPF and repeated Gateway SPF ---
+console.log('\n=== html Received-SPF / repeated gateway ===');
+
+// The raw Received-SPF: header embedded in the Show Original page must not
+// be read as a direct SPF result on gateway-only emails
+const g1 = parseAuthResultsHtml("Gateway SPF: PASS DKIM: 'PASS' Received-SPF: pass (google.com: domain of a@b.com designates 1.2.3.4 as permitted sender)");
+assertNoKey('Received-SPF not treated as direct SPF', g1, 'spf');
+assert('Received-SPF page: gateway + dkim only', g1, { gatewaySpf: 'pass', dkim: 'pass' });
+
+// Every Gateway SPF occurrence must be excised before the plain-SPF match
+const g2 = parseAuthResultsHtml("Gateway SPF: PASS summary repeated Gateway SPF: PASS DKIM: 'PASS'");
+assertNoKey('second Gateway SPF not treated as plain SPF', g2, 'spf');
+assert('double gateway: gatewaySpf + dkim only', g2, { gatewaySpf: 'pass', dkim: 'pass' });
 
 // --- Summary ---
 console.log(`\n${passed} passed, ${failed} failed`);
