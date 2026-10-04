@@ -2,6 +2,8 @@
 
 ## 2026-10-04
 
+- [409b67e](https://github.com/lankeami/gmail-sender-info/commit/409b67e726d68a2ff85ef2e6d0c696bcea1490a5) Fix quoted reason text misparsing and gateway matcher word boundary
+  - Strip RFC 7601 quoted strings from segments before matching methods, preventing reason="policy says spf=pass" from producing false passes - Add trailing \b to gateway.spf regex to prevent prefix matches like gateway.spf=passive matching as pass - Add test cases for both issues (34 total, all passing)
 - [6f0f14a](https://github.com/lankeami/gmail-sender-info/commit/6f0f14a2cb48d4913c1e08dcdd5edfcbdb1c24a0) Address Copilot review feedback on auth-results parsing
   - Add trailing \b word boundary to all value regexes (prevents "PASSIVE" matching as "PASS") - Fix Gateway SPF lookbehind for variable whitespace by splicing out the gateway match before running the plain SPF regex - Remove whole-segment `continue` for arc/i prefixes that dropped valid dkim/dmarc in space-separated fallback - Use (?:^|\s) anchor on spf= to prevent matching inside reason strings like reason="spf=pass" - Update README with gateway SPF docs in auth checks and AI signals - Add test cases: PASSIVE prefix, multi-space gateway, reason string spf, space-separated i.spf fallback (28 total)
 - [02e20ad](https://github.com/lankeami/gmail-sender-info/commit/02e20ad84d3dd771e8f99b54ded2cb11e0a16737) Add edge case tests for auth-results parsing
