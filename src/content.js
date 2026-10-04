@@ -310,18 +310,32 @@
 
     // Sanitize before splitting: RFC 7601 allows ';' inside quoted strings
     // and parenthesized comments, so a per-segment strip would sever pairs
-    // and let their contents be parsed as results.
-    let sanitized = authLine.replace(/"[^"]*"/g, '');
+    // and let their contents be parsed as results. Quoted-pairs (\" and \))
+    // are valid inside both and must not act as closing delimiters.
+    let sanitized = authLine.replace(/"(?:\\.|[^"\\])*"/g, '');
     // An unterminated quote swallows the rest of the header rather than
     // letting its contents be parsed as results.
     const danglingQuote = sanitized.indexOf('"');
     if (danglingQuote !== -1) sanitized = sanitized.slice(0, danglingQuote);
-    // Comments may nest; strip innermost-out until none remain.
-    let prev;
-    do {
-      prev = sanitized;
-      sanitized = sanitized.replace(/\([^()]*\)/g, ' ');
-    } while (sanitized !== prev);
+    // Strip (possibly nested) comments with an escape-aware scanner; an
+    // unterminated comment discards the rest of the field.
+    let stripped = '';
+    let depth = 0;
+    for (let i = 0; i < sanitized.length; i++) {
+      const ch = sanitized[i];
+      if (ch === '\\') {
+        if (depth === 0) stripped += sanitized.substr(i, 2);
+        i++; // quoted-pair: next char is literal inside or outside a comment
+      } else if (ch === '(') {
+        depth++;
+      } else if (ch === ')' && depth > 0) {
+        depth--;
+        if (depth === 0) stripped += ' ';
+      } else if (depth === 0) {
+        stripped += ch;
+      }
+    }
+    sanitized = stripped;
 
     // Value lists are per-method (e.g. softfail is SPF-only, bestguesspass
     // is DMARC-only) so nonstandard combinations are not parsed.

@@ -200,6 +200,34 @@ const q5 = parseAuthResults('Authentication-Results: mx.google.com; foo=pass rea
 assertNoKey('unterminated quote: no spf', q5, 'spf');
 assertNoKey('unterminated quote: no dkim', q5, 'dkim');
 
+// Escaped quote (quoted-pair) must not close the quoted string
+const q6 = parseAuthResults('Authentication-Results: mx.google.com; foo=pass reason="trusted \\"; spf=pass"; dkim=pass; dmarc=pass');
+assertNoKey('escaped quote inside reason: no spf', q6, 'spf');
+assert('escaped quote inside reason: dkim/dmarc kept', q6, { dkim: 'pass', dmarc: 'pass' });
+
+// Escaped backslash before a real closing quote still closes it (regression guard)
+const q7 = parseAuthResults('Authentication-Results: mx.google.com; foo=pass reason="trusted \\\\" spf=fail; dkim=pass');
+assert('escaped backslash then real close quote: spf=fail kept', q7, { spf: 'fail', dkim: 'pass' });
+
+// Escaped ) must not close a comment
+const q8 = parseAuthResults('Authentication-Results: mx.google.com; x-custom=pass (trusted \\); spf=pass); dkim=pass');
+assertNoKey('escaped paren inside comment: no spf', q8, 'spf');
+assert('escaped paren inside comment: dkim kept', q8, { dkim: 'pass' });
+
+// Unterminated comment discards the rest of the field
+const q9 = parseAuthResults('Authentication-Results: mx.google.com; foo=pass (unterminated spf=pass dkim=pass');
+assertNoKey('unterminated comment: no spf', q9, 'spf');
+assertNoKey('unterminated comment: no dkim', q9, 'dkim');
+
+// Text before an unterminated comment still parses (regression guard)
+const q10 = parseAuthResults('Authentication-Results: mx.google.com; spf=pass (score 4 and the rest never closes');
+assert('value before unterminated comment kept', q10, { spf: 'pass' });
+
+// Nested comment with an escaped paren inside
+const q11 = parseAuthResults('Authentication-Results: mx.google.com; foo=pass (outer (inner \\) spf=pass) text); dkim=pass');
+assertNoKey('nested comment with escaped paren: no spf', q11, 'spf');
+assert('nested comment with escaped paren: dkim kept', q11, { dkim: 'pass' });
+
 // --- Repeated methods: first result wins (pre-refactor behavior) ---
 console.log('\n=== repeated methods ===');
 
