@@ -2,6 +2,8 @@
 
 ## 2026-10-04
 
+- [6f0f14a](https://github.com/lankeami/gmail-sender-info/commit/6f0f14a2cb48d4913c1e08dcdd5edfcbdb1c24a0) Address Copilot review feedback on auth-results parsing
+  - Add trailing \b word boundary to all value regexes (prevents "PASSIVE" matching as "PASS") - Fix Gateway SPF lookbehind for variable whitespace by splicing out the gateway match before running the plain SPF regex - Remove whole-segment `continue` for arc/i prefixes that dropped valid dkim/dmarc in space-separated fallback - Use (?:^|\s) anchor on spf= to prevent matching inside reason strings like reason="spf=pass" - Update README with gateway SPF docs in auth checks and AI signals - Add test cases: PASSIVE prefix, multi-space gateway, reason string spf, space-separated i.spf fallback (28 total)
 - [02e20ad](https://github.com/lankeami/gmail-sender-info/commit/02e20ad84d3dd771e8f99b54ded2cb11e0a16737) Add edge case tests for auth-results parsing
   Covers: no-semicolons with gateway.spf, i.spf prefix exclusion, softfail/bestguesspass values, case insensitivity, gateway-only results, and folded multiline headers.
 - [03dc22d](https://github.com/lankeami/gmail-sender-info/commit/03dc22def67898d8a7daadfdb9f8f6b3fb59bb05) Refactor Authentication-Results parsing to use RFC 7601 semicolon splitting
