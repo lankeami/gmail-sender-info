@@ -2,6 +2,8 @@
 
 ## 2026-10-04
 
+- [02e20ad](https://github.com/lankeami/gmail-sender-info/commit/02e20ad84d3dd771e8f99b54ded2cb11e0a16737) Add edge case tests for auth-results parsing
+  Covers: no-semicolons with gateway.spf, i.spf prefix exclusion, softfail/bestguesspass values, case insensitivity, gateway-only results, and folded multiline headers.
 - [03dc22d](https://github.com/lankeami/gmail-sender-info/commit/03dc22def67898d8a7daadfdb9f8f6b3fb59bb05) Refactor Authentication-Results parsing to use RFC 7601 semicolon splitting
   Split on semicolons per RFC 7601 instead of matching bare substrings against the full header line. This prevents gateway.spf=pass (a Google Workspace relay result) from being misread as a genuine spf=pass.
 
