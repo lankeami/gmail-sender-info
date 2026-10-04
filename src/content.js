@@ -309,15 +309,24 @@
     if (!authLine) return null;
 
     const results = {};
+    const VALUES = '(pass|fail|softfail|neutral|none|temperror|permerror|bestguesspass)';
+    const segments = authLine.includes(';') ? authLine.split(';').map(s => s.trim()) : [authLine];
 
-    const spfMatch = authLine.match(/spf=(pass|fail|softfail|neutral|none|temperror|permerror)/i);
-    if (spfMatch) results.spf = spfMatch[1].toLowerCase();
+    for (const seg of segments) {
+      const gwSpf = seg.match(new RegExp('(?:^|\\s)gateway\\.spf=' + VALUES, 'i'));
+      if (gwSpf) { results.gatewaySpf = gwSpf[1].toLowerCase(); }
 
-    const dkimMatch = authLine.match(/dkim=(pass|fail|neutral|none|temperror|permerror)/i);
-    if (dkimMatch) results.dkim = dkimMatch[1].toLowerCase();
+      if (/^(arc|i)\.\w+=/i.test(seg)) continue;
 
-    const dmarcMatch = authLine.match(/dmarc=(pass|fail|bestguesspass|none|temperror|permerror)/i);
-    if (dmarcMatch) results.dmarc = dmarcMatch[1].toLowerCase();
+      const spf = seg.match(new RegExp('(?<![.\\w])spf=' + VALUES, 'i'));
+      if (spf) results.spf = spf[1].toLowerCase();
+
+      const dkim = seg.match(new RegExp('(?:^|\\s)dkim=' + VALUES, 'i'));
+      if (dkim) results.dkim = dkim[1].toLowerCase();
+
+      const dmarc = seg.match(new RegExp('(?:^|\\s)dmarc=' + VALUES, 'i'));
+      if (dmarc) results.dmarc = dmarc[1].toLowerCase();
+    }
 
     return Object.keys(results).length > 0 ? results : null;
   }
@@ -621,6 +630,10 @@
         if (value === 'pass') updatePillState(pill, 'pass', label);
         else if (value === 'fail' || value === 'softfail') updatePillState(pill, 'fail', label);
         else updatePillState(pill, 'loading', label); // n/a
+      }
+
+      if (!authResults.spf && authResults.gatewaySpf) {
+        pills.spf.title = 'SPF result is from a gateway relay allow-list (gateway.spf), not direct sender authentication';
       }
 
       // Compute verdict (same logic as before)
@@ -1455,7 +1468,7 @@
         emailData.messageId = msgResult.id;
         const cached = securityCache.get(msgResult.id);
         if (cached) {
-          emailData.auth = { spf: cached.spf, dkim: cached.dkim, dmarc: cached.dmarc };
+          emailData.auth = { spf: cached.spf, dkim: cached.dkim, dmarc: cached.dmarc, gatewaySpf: cached.gatewaySpf };
         }
       }
 
