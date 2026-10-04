@@ -2,6 +2,8 @@
 
 ## 2026-10-04
 
+- [d223094](https://github.com/lankeami/gmail-sender-info/commit/d223094d2a879e8f15adcb1231d558fbe0120da2) Harden auth-results parsing against quoted/comment injection and header leaks
+  Raw header path (content.js): - Strip quoted strings and (nested) parenthesized comments from the whole header before splitting on semicolons — RFC 7601 allows ';' inside both, so per-segment stripping severed the pairs and let reason text like reason="policy; spf=pass" or comments be parsed as real results - Truncate at an unterminated quote instead of parsing its contents - First result wins when a method repeats across segments (restores pre-refactor behavior; last-wins flipped dual-signed dkim=pass;dkim=fail emails from Trusted to Dangerous) - Restore per-method value lists (softfail is SPF-only, bestguesspass is DMARC-only) so dkim=softfail no longer renders a red fail pill
 - [409b67e](https://github.com/lankeami/gmail-sender-info/commit/409b67e726d68a2ff85ef2e6d0c696bcea1490a5) Fix quoted reason text misparsing and gateway matcher word boundary
   - Strip RFC 7601 quoted strings from segments before matching methods, preventing reason="policy says spf=pass" from producing false passes - Add trailing \b to gateway.spf regex to prevent prefix matches like gateway.spf=passive matching as pass - Add test cases for both issues (34 total, all passing)
 - [6f0f14a](https://github.com/lankeami/gmail-sender-info/commit/6f0f14a2cb48d4913c1e08dcdd5edfcbdb1c24a0) Address Copilot review feedback on auth-results parsing
