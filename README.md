@@ -95,6 +95,8 @@ When viewing an email, the extension fetches the raw message headers from Gmail'
 
 Each check is displayed with a pass/fail/neutral badge in the banner's details accordion.
 
+**Gateway SPF:** Some emails pass through Google Workspace relay allow-lists, which produce a `gateway.spf=pass` result instead of a standard `spf=pass`. The extension distinguishes these: gateway SPF is displayed as a neutral SPF pill with an explanatory tooltip and is not treated as a genuine SPF pass for trust evaluation.
+
 ### 3. Mailing List / Google Groups Resolution
 
 When an email arrives via a Google Groups address or mailing list, Gmail's DOM shows the **group address** as the sender. The extension detects the real sender using the `X-Original-Sender` header:
@@ -119,6 +121,7 @@ The extension extracts key data points from the email DOM and sends them to the 
 | **Sender Mismatch** | Does the display name, subject, or body content claim a brand identity that the sending domain doesn't belong to? Catches generic display names (e.g., "HR") with body-level brand impersonation (e.g., "OLX People Portal" from an unrelated domain). |
 | **Urgency/Threat Language** | Does the subject or body contain urgent threats, scare tactics, or pressure to act immediately? |
 | **Link Discrepancies** | Do links in the email point to domains different from the sender? Link shorteners and subdomains are treated as acceptable. |
+| **Gateway SPF** | When only a gateway relay SPF result is present (no direct SPF), the AI is told to treat SPF as unknown for trust evaluation. |
 
 The AI returns one of three verdicts:
 - **Ok** -- No significant phishing indicators found.

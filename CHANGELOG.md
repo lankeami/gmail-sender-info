@@ -6,6 +6,21 @@
 - [a52ac04](https://github.com/lankeami/gmail-sender-info/commit/a52ac049c1f84c8dbd971b725a5a3152c3fee9c0) Broaden AI sender-mismatch check to detect brand impersonation in body (#44)
   Criterion 1 now instructs Gemini Nano to check the subject and body content (company names, portal names, department names, "signed by" attributions) for brand claims that conflict with the sending domain, even when the display name itself is generic (e.g. "HR", "IT Support").
 
+## 2026-10-04
+
+- [c5d414d](https://github.com/lankeami/gmail-sender-info/commit/c5d414d6ea31f36db9a579ddb843f8f6cfa6f45c) Make auth-results sanitizer escape-aware for quoted-pairs
+  - Quoted-string strip is now quoted-pair aware, so an escaped quote does not close the string: reason="trusted \"; spf=pass" can no longer fabricate an SPF pass, while an escaped backslash before a real closing quote still closes correctly - Comment stripping replaced with an escape-aware depth scanner: an escaped close-paren inside a comment no longer ends it, and an unterminated comment discards the rest of the field instead of leaking its contents into method matching; text before the unterminated comment still parses - Adds 10 assertions covering escaped quotes, escaped backslashes, escaped parens, nested comments with escapes, and unterminated comments (60 total)
+- [d223094](https://github.com/lankeami/gmail-sender-info/commit/d223094d2a879e8f15adcb1231d558fbe0120da2) Harden auth-results parsing against quoted/comment injection and header leaks
+  Raw header path (content.js): - Strip quoted strings and (nested) parenthesized comments from the whole header before splitting on semicolons — RFC 7601 allows ';' inside both, so per-segment stripping severed the pairs and let reason text like reason="policy; spf=pass" or comments be parsed as real results - Truncate at an unterminated quote instead of parsing its contents - First result wins when a method repeats across segments (restores pre-refactor behavior; last-wins flipped dual-signed dkim=pass;dkim=fail emails from Trusted to Dangerous) - Restore per-method value lists (softfail is SPF-only, bestguesspass is DMARC-only) so dkim=softfail no longer renders a red fail pill
+- [409b67e](https://github.com/lankeami/gmail-sender-info/commit/409b67e726d68a2ff85ef2e6d0c696bcea1490a5) Fix quoted reason text misparsing and gateway matcher word boundary
+  - Strip RFC 7601 quoted strings from segments before matching methods, preventing reason="policy says spf=pass" from producing false passes - Add trailing \b to gateway.spf regex to prevent prefix matches like gateway.spf=passive matching as pass - Add test cases for both issues (34 total, all passing)
+- [6f0f14a](https://github.com/lankeami/gmail-sender-info/commit/6f0f14a2cb48d4913c1e08dcdd5edfcbdb1c24a0) Address Copilot review feedback on auth-results parsing
+  - Add trailing \b word boundary to all value regexes (prevents "PASSIVE" matching as "PASS") - Fix Gateway SPF lookbehind for variable whitespace by splicing out the gateway match before running the plain SPF regex - Remove whole-segment `continue` for arc/i prefixes that dropped valid dkim/dmarc in space-separated fallback - Use (?:^|\s) anchor on spf= to prevent matching inside reason strings like reason="spf=pass" - Update README with gateway SPF docs in auth checks and AI signals - Add test cases: PASSIVE prefix, multi-space gateway, reason string spf, space-separated i.spf fallback (28 total)
+- [02e20ad](https://github.com/lankeami/gmail-sender-info/commit/02e20ad84d3dd771e8f99b54ded2cb11e0a16737) Add edge case tests for auth-results parsing
+  Covers: no-semicolons with gateway.spf, i.spf prefix exclusion, softfail/bestguesspass values, case insensitivity, gateway-only results, and folded multiline headers.
+- [03dc22d](https://github.com/lankeami/gmail-sender-info/commit/03dc22def67898d8a7daadfdb9f8f6b3fb59bb05) Refactor Authentication-Results parsing to use RFC 7601 semicolon splitting
+  Split on semicolons per RFC 7601 instead of matching bare substrings against the full header line. This prevents gateway.spf=pass (a Google Workspace relay result) from being misread as a genuine spf=pass.
+
 ## 2026-10-01
 
 - [9e9d4be](https://github.com/lankeami/gmail-sender-info/commit/9e9d4beee8850267f786b50dec4e1057bd17acca) Keep exact from:@ search for full domain; wildcard only for root domain

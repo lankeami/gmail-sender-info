@@ -18,6 +18,8 @@ gmail-sender-info/
 │   ├── promo-small.png     # Chrome Web Store small promo tile (440×280)
 │   ├── promo-large.png     # Chrome Web Store large/marquee promo tile (1400×560)
 │   └── caution.svg         # Amber warning triangle fallback
+├── tests/
+│   └── parse-auth-results.js # Auth-results parser assertions (node tests/parse-auth-results.js); extracts the parsers from src/ at runtime
 └── CLAUDE.md
 ```
 
@@ -38,7 +40,7 @@ gmail-sender-info/
 
 **MAIN world → Content:** `{ type: 'gsi-ai-available-result', requestId, available, hasApi, status }`
 
-**Content → MAIN world (postMessage):** `{ type: 'gsi-analyze-email', requestId, data: { displayName, senderEmail, subject, bodyText, links, isEmptyBody, recipientStatus, replyToMismatch }, skipCache }`
+**Content → MAIN world (postMessage):** `{ type: 'gsi-analyze-email', requestId, data: { displayName, senderEmail, subject, bodyText, links, isEmptyBody, recipientStatus, replyToMismatch, auth: { spf, dkim, dmarc, gatewaySpf } }, skipCache }` (`auth` present only when the security cache is populated; `gatewaySpf` triggers an AI prompt note to treat SPF as unknown)
 
 **MAIN world → Content:** `{ type: 'gsi-ai-analysis-result', requestId, verdict: 'Ok'|'Caution'|'Reject', reasons: [...] }` or `{ ..., unavailable: true }`
 
@@ -91,7 +93,7 @@ The banner (`#gsi-banner`) is a compact horizontal strip with three sections sta
 | Profile image | `.gsi-profile-img` | 20×20 circular Gmail avatar (conditional — only real photos). Retries at 500ms/1500ms |
 | Via badge | `.gsi-via-badge` | "via domain" for mailing list emails |
 | Divider | `.gsi-strip-divider` | `\|` visual separator |
-| SPF pill | `.gsi-pill` | Pass (green) / fail (red) / loading (grey) |
+| SPF pill | `.gsi-pill` | Pass (green) / fail (red) / loading (grey). When only `gateway.spf` is present (no direct `spf=`), stays grey with a tooltip explaining the result comes from a gateway relay allow-list |
 | DKIM pill | `.gsi-pill` | Same color scheme |
 | DMARC pill | `.gsi-pill` | Same color scheme |
 | Verdict pill | `.gsi-pill .gsi-pill-verdict` | Trusted (green), Caution (orange), Dangerous (red) |
