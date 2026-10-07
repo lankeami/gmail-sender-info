@@ -118,7 +118,7 @@ The extension extracts key data points from the email DOM and sends them to the 
 
 | Signal | What It Checks |
 |--------|---------------|
-| **Sender Mismatch** | Does the display name impersonate a known brand but the email address doesn't match? (e.g., "Bank of America" from `random@gmail.com`) |
+| **Sender Mismatch** | Does the display name, subject, or body content claim a brand identity that the sending domain doesn't belong to? Catches generic display names (e.g., "HR") with body-level brand impersonation (e.g., "OLX People Portal" from an unrelated domain). |
 | **Urgency/Threat Language** | Does the subject or body contain urgent threats, scare tactics, or pressure to act immediately? |
 | **Link Discrepancies** | Do links in the email point to domains different from the sender? Link shorteners and subdomains are treated as acceptable. |
 | **Gateway SPF** | When only a gateway relay SPF result is present (no direct SPF), the AI is told to treat SPF as unknown for trust evaluation. |
