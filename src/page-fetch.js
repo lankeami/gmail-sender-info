@@ -32,6 +32,38 @@ function getGmailIk() {
   return null;
 }
 
+/**
+ * Parse SPF/DKIM/DMARC (and Gateway SPF) results from the stripped text of
+ * Gmail's HTML "Show Original" page. Returns an object containing any of
+ * gatewaySpf/spf/dkim/dmarc found (empty object if none).
+ */
+function parseAuthResultsHtml(stripped) {
+  const authData = {};
+  // Value lists are per-method, matching the raw-header parser in content.js.
+  const SPF_VALUES = '(PASS|FAIL|SOFTFAIL|NEUTRAL|NONE|TEMPERROR|PERMERROR)';
+  const DKIM_VALUES = '(PASS|FAIL|NEUTRAL|NONE|TEMPERROR|PERMERROR)';
+  const DMARC_VALUES = '(PASS|FAIL|BESTGUESSPASS|NONE|TEMPERROR|PERMERROR)';
+
+  const gwPattern = '\\bGateway\\s+SPF:\\s*\'?' + SPF_VALUES + '\\b';
+  const gwSpfMatch = stripped.match(new RegExp(gwPattern, 'i'));
+  if (gwSpfMatch) authData.gatewaySpf = gwSpfMatch[1].toLowerCase();
+
+  // Excise EVERY gateway occurrence before the plain-SPF match, and use
+  // (?<![\w-]) so the raw Received-SPF: header embedded in the page is not
+  // read as a direct SPF result.
+  const spfSource = gwSpfMatch ? stripped.replace(new RegExp(gwPattern, 'gi'), ' ') : stripped;
+  const spfMatch = spfSource.match(new RegExp('(?<![\\w-])SPF:\\s*\'?' + SPF_VALUES + '\\b', 'i'));
+  if (spfMatch) authData.spf = spfMatch[1].toLowerCase();
+
+  const dkimMatch = stripped.match(new RegExp('(?<![\\w-])DKIM:\\s*\'?' + DKIM_VALUES + '\\b', 'i'));
+  if (dkimMatch) authData.dkim = dkimMatch[1].toLowerCase();
+
+  const dmarcMatch = stripped.match(new RegExp('(?<![\\w-])DMARC:\\s*\'?' + DMARC_VALUES + '\\b', 'i'));
+  if (dmarcMatch) authData.dmarc = dmarcMatch[1].toLowerCase();
+
+  return authData;
+}
+
 window.addEventListener('message', async (event) => {
   if (event.source !== window) return;
   if (event.data?.type !== 'gsi-fetch-headers') return;
@@ -70,16 +102,7 @@ window.addEventListener('message', async (event) => {
     // strip all tags then extract SPF/DKIM/DMARC from the plain text.
     if (headers.trimStart().startsWith('<')) {
       const stripped = text.replace(/<[^>]*>/g, ' ').replace(/&nbsp;/g, ' ').replace(/&#39;/g, "'").replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#(\d+);/g, (_, n) => String.fromCharCode(parseInt(n)));
-      const authData = {};
-
-      const spfMatch = stripped.match(/\bSPF:\s*'?(PASS|FAIL|SOFTFAIL|NEUTRAL|NONE|TEMPERROR|PERMERROR)\b/i);
-      if (spfMatch) authData.spf = spfMatch[1].toLowerCase();
-
-      const dkimMatch = stripped.match(/\bDKIM:\s*'?(PASS|FAIL|NEUTRAL|NONE|TEMPERROR|PERMERROR)\b/i);
-      if (dkimMatch) authData.dkim = dkimMatch[1].toLowerCase();
-
-      const dmarcMatch = stripped.match(/\bDMARC:\s*'?(PASS|FAIL|BESTGUESSPASS|NONE|TEMPERROR|PERMERROR)\b/i);
-      if (dmarcMatch) authData.dmarc = dmarcMatch[1].toLowerCase();
+      const authData = parseAuthResultsHtml(stripped);
 
       const origSenderMatch = stripped.match(/X-Original-Sender[:\s]+([^\s<]+@[^\s>]+)/i);
       if (origSenderMatch) authData.originalSender = origSenderMatch[1].toLowerCase().trim();
@@ -244,6 +267,9 @@ function buildAiUserPrompt(data) {
   }
   if (data.auth) {
     lines.push(`Authentication: SPF=${data.auth.spf || 'unknown'}, DKIM=${data.auth.dkim || 'unknown'}, DMARC=${data.auth.dmarc || 'unknown'}`);
+    if (!data.auth.spf && data.auth.gatewaySpf) {
+      lines.push(`Note: SPF result is from a gateway relay allow-list (gateway.spf=${data.auth.gatewaySpf}), not direct sender authentication. Treat SPF as unknown for trust evaluation.`);
+    }
   }
   if (data.links && data.links.length > 0) {
     lines.push('Links in email:');

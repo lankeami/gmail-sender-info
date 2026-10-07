@@ -292,7 +292,7 @@
 
   /**
    * Parse Authentication-Results header from raw email headers.
-   * Returns { spf, dkim, dmarc } with string result values, or null.
+   * Returns { spf, dkim, dmarc, gatewaySpf } with string result values, or null.
    */
   function parseAuthResults(headerText) {
     // Unfold continuation lines (lines starting with whitespace)
@@ -308,16 +308,55 @@
     }
     if (!authLine) return null;
 
+    // Sanitize before splitting: RFC 7601 allows ';' inside quoted strings
+    // and parenthesized comments, so a per-segment strip would sever pairs
+    // and let their contents be parsed as results. Quoted-pairs (\" and \))
+    // are valid inside both and must not act as closing delimiters.
+    let sanitized = authLine.replace(/"(?:\\.|[^"\\])*"/g, '');
+    // An unterminated quote swallows the rest of the header rather than
+    // letting its contents be parsed as results.
+    const danglingQuote = sanitized.indexOf('"');
+    if (danglingQuote !== -1) sanitized = sanitized.slice(0, danglingQuote);
+    // Strip (possibly nested) comments with an escape-aware scanner; an
+    // unterminated comment discards the rest of the field.
+    let stripped = '';
+    let depth = 0;
+    for (let i = 0; i < sanitized.length; i++) {
+      const ch = sanitized[i];
+      if (ch === '\\') {
+        if (depth === 0) stripped += sanitized.substr(i, 2);
+        i++; // quoted-pair: next char is literal inside or outside a comment
+      } else if (ch === '(') {
+        depth++;
+      } else if (ch === ')' && depth > 0) {
+        depth--;
+        if (depth === 0) stripped += ' ';
+      } else if (depth === 0) {
+        stripped += ch;
+      }
+    }
+    sanitized = stripped;
+
+    // Value lists are per-method (e.g. softfail is SPF-only, bestguesspass
+    // is DMARC-only) so nonstandard combinations are not parsed.
+    const SPF_VALUES = '(pass|fail|softfail|neutral|none|temperror|permerror)';
+    const DKIM_VALUES = '(pass|fail|neutral|none|temperror|permerror)';
+    const DMARC_VALUES = '(pass|fail|bestguesspass|none|temperror|permerror)';
+    const matchers = [
+      ['gatewaySpf', new RegExp('(?:^|\\s)gateway\\.spf=' + SPF_VALUES + '\\b', 'i')],
+      ['spf', new RegExp('(?:^|\\s)spf=' + SPF_VALUES + '\\b', 'i')],
+      ['dkim', new RegExp('(?:^|\\s)dkim=' + DKIM_VALUES + '\\b', 'i')],
+      ['dmarc', new RegExp('(?:^|\\s)dmarc=' + DMARC_VALUES + '\\b', 'i')],
+    ];
+
     const results = {};
-
-    const spfMatch = authLine.match(/spf=(pass|fail|softfail|neutral|none|temperror|permerror)/i);
-    if (spfMatch) results.spf = spfMatch[1].toLowerCase();
-
-    const dkimMatch = authLine.match(/dkim=(pass|fail|neutral|none|temperror|permerror)/i);
-    if (dkimMatch) results.dkim = dkimMatch[1].toLowerCase();
-
-    const dmarcMatch = authLine.match(/dmarc=(pass|fail|bestguesspass|none|temperror|permerror)/i);
-    if (dmarcMatch) results.dmarc = dmarcMatch[1].toLowerCase();
+    for (const seg of sanitized.split(';').map(s => s.trim())) {
+      for (const [key, re] of matchers) {
+        if (results[key]) continue; // first result wins when a method repeats
+        const m = seg.match(re);
+        if (m) results[key] = m[1].toLowerCase();
+      }
+    }
 
     return Object.keys(results).length > 0 ? results : null;
   }
@@ -621,6 +660,10 @@
         if (value === 'pass') updatePillState(pill, 'pass', label);
         else if (value === 'fail' || value === 'softfail') updatePillState(pill, 'fail', label);
         else updatePillState(pill, 'loading', label); // n/a
+      }
+
+      if (!authResults.spf && authResults.gatewaySpf) {
+        pills.spf.title = 'SPF result is from a gateway relay allow-list (gateway.spf), not direct sender authentication';
       }
 
       // Compute verdict (same logic as before)
@@ -1455,7 +1498,7 @@
         emailData.messageId = msgResult.id;
         const cached = securityCache.get(msgResult.id);
         if (cached) {
-          emailData.auth = { spf: cached.spf, dkim: cached.dkim, dmarc: cached.dmarc };
+          emailData.auth = { spf: cached.spf, dkim: cached.dkim, dmarc: cached.dmarc, gatewaySpf: cached.gatewaySpf };
         }
       }
 
