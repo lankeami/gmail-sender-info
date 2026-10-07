@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-10-07
+
+- [a52ac04](https://github.com/lankeami/gmail-sender-info/commit/a52ac049c1f84c8dbd971b725a5a3152c3fee9c0) Broaden AI sender-mismatch check to detect brand impersonation in body (#44)
+  Criterion 1 now instructs Gemini Nano to check the subject and body content (company names, portal names, department names, "signed by" attributions) for brand claims that conflict with the sending domain, even when the display name itself is generic (e.g. "HR", "IT Support").
+
 ## 2026-10-01
 
 - [9e9d4be](https://github.com/lankeami/gmail-sender-info/commit/9e9d4beee8850267f786b50dec4e1057bd17acca) Keep exact from:@ search for full domain; wildcard only for root domain
