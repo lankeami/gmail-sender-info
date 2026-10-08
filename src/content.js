@@ -60,12 +60,36 @@
 
   function invalidateContext() {
     contextValid = false;
-    if (activeObserver) {
-      activeObserver.disconnect();
-      activeObserver = null;
-    }
-    removeBanner();
     hideTooltip();
+    showStaleNudge();
+  }
+
+  function showStaleNudge() {
+    let banner = document.getElementById('gsi-banner');
+    if (banner && banner.querySelector('.gsi-stale-nudge')) return;
+    if (!banner) {
+      const subjectEl = document.querySelector('.hP');
+      if (!subjectEl) return;
+      banner = document.createElement('div');
+      banner.id = 'gsi-banner';
+      subjectEl.parentElement.insertBefore(banner, subjectEl);
+    }
+    banner.classList.add('gsi-stale');
+    const nudge = document.createElement('div');
+    nudge.classList.add('gsi-stale-nudge');
+    nudge.append('⚠️ Extension updated — ');
+    const link = document.createElement('a');
+    link.href = '#';
+    link.classList.add('gsi-stale-nudge-link');
+    link.textContent = 'refresh page';
+    link.addEventListener('click', (e) => {
+      e.preventDefault();
+      location.reload();
+    });
+    nudge.append(link, ' to restore live data');
+    const strip = banner.querySelector('.gsi-strip-row');
+    if (strip) strip.after(nudge);
+    else banner.append(nudge);
   }
 
   // --- Message passing with dedup ---
@@ -2005,7 +2029,12 @@
   let activeObserver = null;
 
   function scan() {
-    if (!contextValid) return;
+    if (!contextValid) {
+      // Extension was updated mid-session; show refresh nudge on email views
+      if (document.querySelector('.hP')) showStaleNudge();
+      else removeBanner();
+      return;
+    }
 
     // Process inbox rows
     const rows = document.querySelectorAll('.zA:not([data-gsi-processed])');

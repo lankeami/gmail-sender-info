@@ -449,6 +449,39 @@
   color: #3c4043;
 }
 
+/* --- Stale context nudge (extension updated mid-session) --- */
+
+.gsi-stale .gsi-strip-row {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.gsi-stale .gsi-ai-line {
+  display: none;
+}
+
+.gsi-stale-nudge {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 14px;
+  border-top: 1px solid #ebebeb;
+  font-size: 12px;
+  color: #b06000;
+  background: #fef7e0;
+}
+
+.gsi-stale-nudge-link {
+  color: #1a73e8;
+  text-decoration: none;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.gsi-stale-nudge-link:hover {
+  text-decoration: underline;
+}
+
 .gsi-country-flag {
   font-size: 16px;
   display: inline-block;
