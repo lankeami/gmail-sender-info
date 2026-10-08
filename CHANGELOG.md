@@ -2,6 +2,7 @@
 
 ## 2026-10-08
 
+- [b0933e2](https://github.com/lankeami/gmail-sender-info/commit/b0933e2c2151a12ea878745d5309d069919ee395) chore: release 2026.1008.1142
 - [316884e](https://github.com/lankeami/gmail-sender-info/commit/316884e810196517bb6df5cf56a5c0e7c3efa0de) Show refresh nudge instead of removing banner on extension update
   When Chrome auto-updates the extension, the old content script runtime context is invalidated. Previously this removed the banner entirely, leaving users with no UI until a manual page refresh.
 
