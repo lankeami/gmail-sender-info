@@ -1467,39 +1467,47 @@
         banner.__gsiAiDebug = aiDiagLines;
       }
 
-      if (!aiStatus.available || aiStatus.status === 'downloading' || aiStatus.status === 'downloadable') {
+      if (!aiStatus.available) {
         aiLine.style.display = '';
         aiLineText.classList.remove('gsi-ai-line-loading');
-        if (aiStatus.status === 'downloading' || aiStatus.status === 'downloadable') {
+        if (aiStatus.status === 'downloading') {
+          aiLineText.textContent = 'AI model downloading — safety check will activate automatically';
+        } else if (aiStatus.status === 'downloadable') {
           aiLineText.textContent = '';
-          const dlBtn = document.createElement('button');
-          dlBtn.type = 'button';
-          dlBtn.textContent = 'Set up AI safety check';
-          dlBtn.style.cssText = 'font-size:12px;padding:3px 12px;cursor:pointer;border:1px solid #1a73e8;border-radius:4px;background:#1a73e8;color:#fff;margin-left:6px;font-weight:500';
-          dlBtn.addEventListener('click', () => {
-            dlBtn.disabled = true;
-            dlBtn.style.opacity = '0.6';
-            dlBtn.textContent = 'Downloading model…';
+          const hint = document.createElement('span');
+          hint.textContent = 'Get AI-powered safety checks — ';
+          hint.style.cssText = 'color:#5f6368;font-style:italic';
+          const enableBtn = document.createElement('button');
+          enableBtn.type = 'button';
+          enableBtn.textContent = 'Enable local AI model';
+          enableBtn.style.cssText = 'font-size:11px;padding:2px 8px;cursor:pointer;border:1px solid #dadce0;border-radius:12px;background:#fff;color:#1a73e8;font-weight:500';
+          enableBtn.addEventListener('click', () => {
+            enableBtn.disabled = true;
+            enableBtn.style.opacity = '0.6';
+            enableBtn.textContent = 'Downloading…';
             const reqId = ++headerRequestId;
             pendingAiRequests.set(reqId, (resp) => {
               if (resp.ready) {
-                aiLineText.textContent = 'AI model ready ';
-                dlBtn.textContent = 'Activate';
-                dlBtn.disabled = false;
-                dlBtn.style.opacity = '1';
-                dlBtn.onclick = () => location.reload();
+                hint.textContent = 'AI model ready — ';
+                enableBtn.textContent = 'Reload to activate';
+                enableBtn.disabled = false;
+                enableBtn.style.opacity = '1';
+                enableBtn.onclick = () => location.reload();
               } else {
-                dlBtn.disabled = false;
-                dlBtn.style.opacity = '1';
-                dlBtn.textContent = 'Retry setup';
-                aiLineText.textContent = (resp.error || 'Download failed') + ' ';
+                enableBtn.disabled = false;
+                enableBtn.style.opacity = '1';
+                enableBtn.textContent = 'Retry';
+                hint.textContent = (resp.error || 'Download failed') + ' — ';
               }
             });
             window.postMessage({ type: 'gsi-download-ai', requestId: reqId }, '*');
           });
-          aiLineText.appendChild(dlBtn);
+          aiLineText.appendChild(hint);
+          aiLineText.appendChild(enableBtn);
+        } else if (aiStatus.hasApi) {
+          aiLineText.textContent = 'AI safety check ready — restart Chrome to activate';
         } else {
-          aiLineText.textContent = 'AI safety check requires a browser restart to activate';
+          aiLine.style.display = 'none';
         }
         return;
       }

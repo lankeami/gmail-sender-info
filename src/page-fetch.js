@@ -356,22 +356,32 @@ window.addEventListener('message', async (event) => {
   if (event.source !== window) return;
   if (event.data?.type !== 'gsi-download-ai') return;
   const { requestId } = event.data;
+  const createFn = typeof LanguageModel !== 'undefined'
+    ? LanguageModel.create.bind(LanguageModel)
+    : typeof window.ai?.languageModel !== 'undefined'
+      ? window.ai.languageModel.create.bind(window.ai.languageModel)
+      : null;
+  if (!createFn) {
+    window.postMessage({ type: 'gsi-ai-download-result', requestId, ready: false, error: 'AI API not available' }, '*');
+    return;
+  }
   try {
-    const session = await LanguageModel.create({
+    const session = await withTimeout(createFn({
       monitor(m) {
         m.addEventListener('downloadprogress', (e) => {
           console.log('[GSI] AI model download:', Math.round(e.loaded / e.total * 100) + '%');
         });
       },
       initialPrompts: [{ role: 'system', content: 'test' }],
-    });
+    }), 60000);
     if (session) {
       session.destroy();
       aiAvailable = true;
     }
     window.postMessage({ type: 'gsi-ai-download-result', requestId, ready: true }, '*');
   } catch (e) {
-    window.postMessage({ type: 'gsi-ai-download-result', requestId, ready: false, error: e.message }, '*');
+    const msg = e.message === 'timeout' ? 'Download timed out — try again later' : e.message;
+    window.postMessage({ type: 'gsi-ai-download-result', requestId, ready: false, error: msg }, '*');
   }
 });
 
