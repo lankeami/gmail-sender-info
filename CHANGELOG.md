@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-10-16
+
+- [ef64ec8](https://github.com/lankeami/gmail-sender-info/commit/ef64ec8077b796a4b32dffbc34ed2577eb7f0b80) Fix AI setup button showing for users with working models
+  The availability check condition in content.js ignored the `available` flag and checked the raw `status` string, so Chrome returning "downloadable" (even when the model worked) triggered the setup button. Trust `available` as the source of truth instead.
+
 ## 2026-10-08
 
 - [b0933e2](https://github.com/lankeami/gmail-sender-info/commit/b0933e2c2151a12ea878745d5309d069919ee395) chore: release 2026.1008.1142
