@@ -1026,7 +1026,7 @@
   function isGoogleAvatarUrl(src) {
     try {
       const u = new URL(src);
-      return /^lh\d\.googleusercontent\.com$/.test(u.hostname.toLowerCase())
+      return /^lh\d\.(googleusercontent|google)\.com$/.test(u.hostname.toLowerCase())
         && (u.pathname.startsWith('/a/') || u.pathname.startsWith('/a-/')
             || u.pathname.startsWith('/cm/') || u.pathname.startsWith('/ogw/'))
         && !u.pathname.includes('default-user');
