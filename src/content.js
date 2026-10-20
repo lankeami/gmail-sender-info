@@ -896,12 +896,14 @@
         resolve({ ...resp, chromeVersion: getChromeVersion() });
       });
       window.postMessage({ type: 'gsi-check-ai', requestId }, '*');
+      // Must outlive page-fetch's 10s create() verification or a slow cold
+      // model load reports as unavailable
       setTimeout(() => {
         if (pendingAiRequests.has(requestId)) {
           pendingAiRequests.delete(requestId);
           resolve({ available: false });
         }
-      }, 5000);
+      }, 15000);
     });
   }
 
@@ -1021,6 +1023,16 @@
    * with a googleusercontent URL, or a background-image, or have a child <img>.
    * Returns { url, debug } where debug contains diagnostic info for the debug section.
    */
+  function isGoogleAvatarUrl(src) {
+    try {
+      const u = new URL(src);
+      return /^lh\d\.(googleusercontent|google)\.com$/.test(u.hostname.toLowerCase())
+        && (u.pathname.startsWith('/a/') || u.pathname.startsWith('/a-/')
+            || u.pathname.startsWith('/cm/') || u.pathname.startsWith('/ogw/'))
+        && !u.pathname.includes('default-user');
+    } catch { return false; }
+  }
+
   function extractProfileImageUrl(envelopeEmail) {
     const debug = { senderFound: false, hovercardFound: false, hovercardTag: null, hovercardClass: null, matchedUrl: null, matchSource: null, dataName: null, candidates: [] };
 
@@ -1039,10 +1051,7 @@
       debug.hovercardClass = hovercardEl.className?.substring(0, 60) || '';
 
       // Gmail lazy-loads the real photo src onto the mask <img> after initial render.
-      // Check if the src has already been updated to a googleusercontent URL.
-      // Skip default/placeholder avatars (e.g. "default-user" in the URL).
-      if (hovercardEl.src && hovercardEl.src.includes('googleusercontent.com')
-          && !hovercardEl.src.includes('default-user')) {
+      if (hovercardEl.src && isGoogleAvatarUrl(hovercardEl.src)) {
         debug.matchedUrl = hovercardEl.src;
         debug.matchSource = 'hovercard-src';
         debug.candidates.push(`hovercard-src: ${hovercardEl.src.substring(0, 150)}`);
@@ -1053,7 +1062,8 @@
       if (debug.matchedUrl) return { url: debug.matchedUrl, debug };
     }
 
-    // Strategy 2: Broader search — find any img near .gD[email] with googleusercontent src
+    // Strategy 2: Broader search — find any img near .gD[email] with googleusercontent src.
+    // Skip images inside the message body (.a3s, .ii) to prevent spoofing.
     const senderEl = document.querySelector(`.gD[email="${CSS.escape(envelopeEmail)}"]`) || document.querySelector('.gD[email]');
     if (senderEl) {
       const container = senderEl.closest('[data-message-id]')
@@ -1066,8 +1076,10 @@
       if (container?.parentElement) searchContainers.push(container.parentElement);
       for (const c of searchContainers) {
         for (const img of c.querySelectorAll('img')) {
-          if (img.src && img.src.includes('googleusercontent.com')
-              && !img.src.includes('default-user')) {
+          if (img.closest('.a3s, .ii')) continue;
+          const hcid = img.getAttribute('data-hovercard-id');
+          if (hcid && hcid.toLowerCase() !== envelopeEmail) continue;
+          if (isGoogleAvatarUrl(img.src)) {
             debug.candidates.push(`container-img: ${img.src.substring(0, 120)}`);
             debug.matchedUrl = img.src;
             debug.matchSource = 'container-img';
@@ -1456,10 +1468,12 @@
     currentBannerEmail = info.fullDomain;
 
     // AI spam/phishing analysis (async, won't block banner render)
-    (async () => {
+    const runAiFlow = async (attempt = 0) => {
       const aiStatus = await checkAiAvailable();
+      if (!banner.isConnected) return;
 
       // Always append AI diagnostics (handles race with debug section builder)
+      if (attempt === 0) {
       const aiDiagLines = [
         '--- AI Availability ---',
         `available: ${aiStatus.available}`,
@@ -1475,12 +1489,17 @@
       } else {
         banner.__gsiAiDebug = aiDiagLines;
       }
+      }
 
       if (!aiStatus.available) {
         aiLine.style.display = '';
         aiLineText.classList.remove('gsi-ai-line-loading');
         if (aiStatus.status === 'downloading') {
           aiLineText.textContent = 'AI model downloading — safety check will activate automatically';
+          // Make "automatically" true: re-check every 30s for up to 10 min
+          if (attempt < 20) {
+            setTimeout(() => { if (banner.isConnected) runAiFlow(attempt + 1); }, 30000);
+          }
         } else if (aiStatus.status === 'downloadable') {
           aiLineText.textContent = '';
           const hint = document.createElement('span');
@@ -1716,7 +1735,8 @@
       const result = await requestAiAnalysis(emailData);
       if (!banner.isConnected) return; // banner was removed while waiting
       applyAiResult(result);
-    })();
+    };
+    runAiFlow();
 
     // Detect original sender for Google Groups / mailing list emails
     (async () => {

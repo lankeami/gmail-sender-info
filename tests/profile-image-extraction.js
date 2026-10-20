@@ -119,9 +119,10 @@ class El {
   }
 
   closest(sel) {
+    const selectors = sel.split(',').map(s => s.trim());
     let el = this;
     while (el) {
-      if (el._matches(sel)) return el;
+      if (selectors.some(s => el._matches(s))) return el;
       el = el.parentElement;
     }
     return null;
@@ -145,8 +146,11 @@ function assert(name, actual, expected) {
   }
 }
 
-// --- Extract the function under test ---
+// --- Extract functions under test ---
 const srcFile = path.join(__dirname, '..', 'src', 'content.js');
+const isGoogleAvatarUrl = eval(
+  '(' + extractFunction(srcFile, 'isGoogleAvatarUrl') + ')'
+);
 const extractProfileImageUrl = eval(
   '(' + extractFunction(srcFile, 'extractProfileImageUrl') + ')'
 );
@@ -282,6 +286,143 @@ console.log('\n--- Regression: null email ---');
   global.document = doc;
   const result = extractProfileImageUrl(null);
   assert('null email returns null url', result.url, null);
+  delete global.document;
+}
+
+// =========================================================================
+// Security: isGoogleAvatarUrl rejects non-avatar URLs
+// =========================================================================
+console.log('\n--- Security: isGoogleAvatarUrl validation ---');
+{
+  assert('accepts /a/ path', isGoogleAvatarUrl('https://lh3.googleusercontent.com/a/photo'), true);
+  assert('accepts /a-/ path', isGoogleAvatarUrl('https://lh3.googleusercontent.com/a-/ALV-photo'), true);
+  assert('accepts /cm/ path', isGoogleAvatarUrl('https://lh3.googleusercontent.com/cm/AGP-photo'), true);
+  assert('accepts /ogw/ path', isGoogleAvatarUrl('https://lh3.googleusercontent.com/ogw/AF2b-photo'), true);
+  assert('accepts lh3.google.com host', isGoogleAvatarUrl('https://lh3.google.com/a-/ALV-photo'), true);
+  assert('accepts lh5.google.com host', isGoogleAvatarUrl('https://lh5.google.com/a/photo'), true);
+  assert('rejects /ci/ path (inline content)', isGoogleAvatarUrl('https://ci3.googleusercontent.com/meips/img'), false);
+  assert('rejects non-lh hostname', isGoogleAvatarUrl('https://evil.googleusercontent.com/a/photo'), false);
+  assert('rejects non-google host', isGoogleAvatarUrl('https://evil.com/a/lh3.googleusercontent.com'), false);
+  assert('rejects default-user', isGoogleAvatarUrl('https://lh3.googleusercontent.com/a/default-user=s40'), false);
+  assert('rejects empty string', isGoogleAvatarUrl(''), false);
+  assert('rejects malformed URL', isGoogleAvatarUrl('not-a-url'), false);
+}
+
+// =========================================================================
+// Security: Strategy 2 skips images inside message body (.a3s, .ii)
+// =========================================================================
+console.log('\n--- Security: Skips body-embedded images ---');
+{
+  const email = 'mallory@evil.com';
+  const fakeAvatar = 'https://lh3.googleusercontent.com/a/fake-trusted-photo';
+
+  const senderSpan = new El('span', { class: 'gD', email });
+  const bodyImg = new El('img', { src: fakeAvatar });
+  const messageBody = new El('div', { class: 'a3s' });
+  messageBody.append(bodyImg);
+  const container = new El('div', { class: 'gE' });
+  container.append(senderSpan, messageBody);
+
+  const doc = new El('div');
+  doc.append(container);
+  global.document = doc;
+
+  const result = extractProfileImageUrl(email);
+  assert('rejects avatar-like img inside .a3s message body', result.url, null);
+  delete global.document;
+}
+
+// =========================================================================
+// Security: Strategy 2 accepts avatar outside message body
+// =========================================================================
+console.log('\n--- Security: Accepts avatar outside message body ---');
+{
+  const email = 'frank@example.com';
+  const realAvatar = 'https://lh3.googleusercontent.com/cm/real-photo';
+
+  const senderSpan = new El('span', { class: 'gD', email });
+  const headerImg = new El('img', { src: realAvatar });
+  const bodyImg = new El('img', { src: 'https://lh3.googleusercontent.com/a/fake' });
+  const messageBody = new El('div', { class: 'a3s' });
+  messageBody.append(bodyImg);
+  const container = new El('div', { class: 'gE' });
+  container.append(senderSpan, headerImg, messageBody);
+
+  const doc = new El('div');
+  doc.append(container);
+  global.document = doc;
+
+  const result = extractProfileImageUrl(email);
+  assert('picks header avatar, skips body img', result.url, realAvatar);
+  delete global.document;
+}
+
+// =========================================================================
+// Bug: Strategy 2 must not pick up another person's hovercard avatar
+// (e.g. the reply-box shows the current user's photo, not the sender's)
+// =========================================================================
+console.log('\n--- Bug: Skips other person\'s hovercard avatar ---');
+{
+  const senderEmail = 'scott@bollandbranch.com';
+  const userAvatar = 'https://lh3.googleusercontent.com/a/jay-photo';
+
+  const senderSpan = new El('span', { class: 'gD', email: senderEmail });
+  const gE = new El('div', { class: 'gE' });
+  gE.append(senderSpan);
+
+  // Reply-box avatar for a different user
+  const replyImg = new El('img', {
+    src: userAvatar,
+    'data-hovercard-id': 'jay@bollandbranch.com',
+  });
+  const replyBox = new El('div', { class: 'cf wS' });
+  replyBox.append(replyImg);
+
+  const parent = new El('div', { class: 'nH' });
+  parent.append(gE, replyBox);
+
+  const doc = new El('div');
+  doc.append(parent);
+  global.document = doc;
+
+  const result = extractProfileImageUrl(senderEmail);
+  assert('rejects avatar belonging to a different user', result.url, null);
+  delete global.document;
+}
+
+// Same scenario but with the sender's own hovercard img present too
+console.log('\n--- Bug: Picks sender avatar, skips other person\'s ---');
+{
+  const senderEmail = 'scott@bollandbranch.com';
+  const senderAvatar = 'https://lh3.googleusercontent.com/cm/scott-photo';
+  const userAvatar = 'https://lh3.googleusercontent.com/a/jay-photo';
+
+  const senderSpan = new El('span', { class: 'gD', email: senderEmail });
+  const gE = new El('div', { class: 'gE' });
+  gE.append(senderSpan);
+
+  // Reply-box avatar for a different user (appears first in DOM order)
+  const replyImg = new El('img', {
+    src: userAvatar,
+    'data-hovercard-id': 'jay@bollandbranch.com',
+  });
+  const replyBox = new El('div', { class: 'cf wS' });
+  replyBox.append(replyImg);
+
+  // Sender's avatar (no hovercard id, just a googleusercontent img)
+  const senderImg = new El('img', { src: senderAvatar });
+  const goContainer = new El('div', { class: 'go' });
+  goContainer.append(senderImg);
+
+  const parent = new El('div', { class: 'nH' });
+  parent.append(gE, replyBox, goContainer);
+
+  const doc = new El('div');
+  doc.append(parent);
+  global.document = doc;
+
+  const result = extractProfileImageUrl(senderEmail);
+  assert('picks sender avatar, skips other user', result.url, senderAvatar);
   delete global.document;
 }
 
