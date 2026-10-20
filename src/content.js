@@ -1028,8 +1028,9 @@
     debug.senderFound = true;
 
     // Strategy 1: Find the avatar mask <img> with data-hovercard-id matching the sender.
-    // Must target img.ajn specifically — other elements like .yP spans also carry this attribute.
-    const hovercardEl = document.querySelector(`img.ajn[data-hovercard-id="${CSS.escape(envelopeEmail)}"]`);
+    // Use img tag (not a specific class) — Gmail rotates CSS classes (ajn, etc.)
+    // but data-hovercard-id is stable. The img prefix excludes .yP spans.
+    const hovercardEl = document.querySelector(`img[data-hovercard-id="${CSS.escape(envelopeEmail)}"]`);
 
     if (hovercardEl) {
       debug.dataName = hovercardEl.getAttribute('data-name') || null;
@@ -1058,9 +1059,14 @@
       const container = senderEl.closest('[data-message-id]')
         || senderEl.closest('.gE') || senderEl.closest('.gs')
         || senderEl.closest('.adn');
-      if (container) {
-        for (const img of container.querySelectorAll('img')) {
-          if (img.src && img.src.includes('googleusercontent.com/a')
+      // Gmail may render the avatar as a sibling of .gE (in a .go container
+      // at the same level), so also search the parent of the container.
+      const searchContainers = [];
+      if (container) searchContainers.push(container);
+      if (container?.parentElement) searchContainers.push(container.parentElement);
+      for (const c of searchContainers) {
+        for (const img of c.querySelectorAll('img')) {
+          if (img.src && img.src.includes('googleusercontent.com')
               && !img.src.includes('default-user')) {
             debug.candidates.push(`container-img: ${img.src.substring(0, 120)}`);
             debug.matchedUrl = img.src;
@@ -1259,10 +1265,13 @@
 
     banner.appendChild(stripRow);
 
-    // Profile image retry
+    // Profile image retry — Gmail lazy-loads avatar images, so retry at
+    // increasing intervals to catch late-arriving photos.
     if (!tryAddProfileImage()) {
       setTimeout(() => { if (banner.isConnected) tryAddProfileImage(); }, 500);
       setTimeout(() => { if (banner.isConnected && !stripRow.querySelector('.gsi-profile-img')) tryAddProfileImage(); }, 1500);
+      setTimeout(() => { if (banner.isConnected && !stripRow.querySelector('.gsi-profile-img')) tryAddProfileImage(); }, 3000);
+      setTimeout(() => { if (banner.isConnected && !stripRow.querySelector('.gsi-profile-img')) tryAddProfileImage(); }, 5000);
     }
 
     // --- AI summary line (below strip, always visible) ---
