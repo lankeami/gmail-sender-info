@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-10-20
+
+- [3172813](https://github.com/lankeami/gmail-sender-info/commit/3172813ae088d834def4b37fa964d194517bf26b) Harden profile image URL validation against body-embedded spoofing
+  Replace substring-based googleusercontent.com check with strict isGoogleAvatarUrl() that parses the URL and validates hostname (lh{N}.googleusercontent.com) and avatar-specific paths (/a/, /a-/, /cm/, /ogw/). Skip images inside Gmail message body (.a3s, .ii) in Strategy 2 to prevent malicious emails from injecting fake sender avatars.
+
 ## 2026-10-16
 
 - [1742665](https://github.com/lankeami/gmail-sender-info/commit/17426651361d9f9eae1e3d2d8dfb9937e46825b4) chore: release 2026.1016.1019
