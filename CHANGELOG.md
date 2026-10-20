@@ -2,6 +2,7 @@
 
 ## 2026-10-20
 
+- [d5cdd18](https://github.com/lankeami/gmail-sender-info/commit/d5cdd18a1a288f534aae6544f0591113a68ab0e6) chore: bump manifest version to 2026.1020.1117
 - [37702f7](https://github.com/lankeami/gmail-sender-info/commit/37702f7cc1333b29cbe1138368ffbdb92d80f65a) Accept lh{N}.google.com as avatar hostname
   Google serves profile photos from both lh3.googleusercontent.com and lh3.google.com. The strict hostname check was rejecting the latter, causing Strategy 1 to find the correct hovercard element but then discard it because the URL did not match.
 - [2e8cac0](https://github.com/lankeami/gmail-sender-info/commit/2e8cac051394cd9d0fa3ed6e16f6cba427f3ec16) Skip other users' avatars in Strategy 2 container search
