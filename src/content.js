@@ -1077,6 +1077,8 @@
       for (const c of searchContainers) {
         for (const img of c.querySelectorAll('img')) {
           if (img.closest('.a3s, .ii')) continue;
+          const hcid = img.getAttribute('data-hovercard-id');
+          if (hcid && hcid.toLowerCase() !== envelopeEmail) continue;
           if (isGoogleAvatarUrl(img.src)) {
             debug.candidates.push(`container-img: ${img.src.substring(0, 120)}`);
             debug.matchedUrl = img.src;

@@ -355,6 +355,75 @@ console.log('\n--- Security: Accepts avatar outside message body ---');
   delete global.document;
 }
 
+// =========================================================================
+// Bug: Strategy 2 must not pick up another person's hovercard avatar
+// (e.g. the reply-box shows the current user's photo, not the sender's)
+// =========================================================================
+console.log('\n--- Bug: Skips other person\'s hovercard avatar ---');
+{
+  const senderEmail = 'scott@bollandbranch.com';
+  const userAvatar = 'https://lh3.googleusercontent.com/a/jay-photo';
+
+  const senderSpan = new El('span', { class: 'gD', email: senderEmail });
+  const gE = new El('div', { class: 'gE' });
+  gE.append(senderSpan);
+
+  // Reply-box avatar for a different user
+  const replyImg = new El('img', {
+    src: userAvatar,
+    'data-hovercard-id': 'jay@bollandbranch.com',
+  });
+  const replyBox = new El('div', { class: 'cf wS' });
+  replyBox.append(replyImg);
+
+  const parent = new El('div', { class: 'nH' });
+  parent.append(gE, replyBox);
+
+  const doc = new El('div');
+  doc.append(parent);
+  global.document = doc;
+
+  const result = extractProfileImageUrl(senderEmail);
+  assert('rejects avatar belonging to a different user', result.url, null);
+  delete global.document;
+}
+
+// Same scenario but with the sender's own hovercard img present too
+console.log('\n--- Bug: Picks sender avatar, skips other person\'s ---');
+{
+  const senderEmail = 'scott@bollandbranch.com';
+  const senderAvatar = 'https://lh3.googleusercontent.com/cm/scott-photo';
+  const userAvatar = 'https://lh3.googleusercontent.com/a/jay-photo';
+
+  const senderSpan = new El('span', { class: 'gD', email: senderEmail });
+  const gE = new El('div', { class: 'gE' });
+  gE.append(senderSpan);
+
+  // Reply-box avatar for a different user (appears first in DOM order)
+  const replyImg = new El('img', {
+    src: userAvatar,
+    'data-hovercard-id': 'jay@bollandbranch.com',
+  });
+  const replyBox = new El('div', { class: 'cf wS' });
+  replyBox.append(replyImg);
+
+  // Sender's avatar (no hovercard id, just a googleusercontent img)
+  const senderImg = new El('img', { src: senderAvatar });
+  const goContainer = new El('div', { class: 'go' });
+  goContainer.append(senderImg);
+
+  const parent = new El('div', { class: 'nH' });
+  parent.append(gE, replyBox, goContainer);
+
+  const doc = new El('div');
+  doc.append(parent);
+  global.document = doc;
+
+  const result = extractProfileImageUrl(senderEmail);
+  assert('picks sender avatar, skips other user', result.url, senderAvatar);
+  delete global.document;
+}
+
 // --- Summary ---
 console.log(`\n${passed + failed} tests: ${passed} passed, ${failed} failed`);
 process.exit(failed > 0 ? 1 : 0);
