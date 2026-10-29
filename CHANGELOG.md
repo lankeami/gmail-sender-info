@@ -1,5 +1,20 @@
 # Changelog
 
+## 2026-10-29
+
+- [5ddfd06](https://github.com/lankeami/gmail-sender-info/commit/5ddfd06d46458536c266bd4087627397945a7c4e) Remove tracked Playwright log and sync CLAUDE.md permissions (#61)
+  .playwright-mcp/ is already in .gitignore, but one console log was committed before that and is still tracked.
+- [256b61b](https://github.com/lankeami/gmail-sender-info/commit/256b61bf5e5d6f2ab9bd048b4bd3d3e6daeeff00) Add GitHub Actions workflow to run tests (#59)
+  None of the test scripts in tests/ ran in CI, so regressions in the auth-results parser, profile image extraction, or AI prompt could merge unnoticed.
+- [abb1df1](https://github.com/lankeami/gmail-sender-info/commit/abb1df18ef94d6016b6ec51d5dbc1151841debcc) Require https for BIMI logos and scope postMessage to page origin (#60)
+  BIMI logo URLs come from the sender's DNS TXT record, but lookupBimi() only checked for a .svg suffix, so http: (and odd schemes such as data: or javascript:) URLs were passed on to the page as image sources. Also, every window.postMessage between content.js and page-fetch.js used '*' as the target origin even though both scripts share one window.
+- [7f75551](https://github.com/lankeami/gmail-sender-info/commit/7f75551708711db4919a01b180de2185f12dbba8) Escape envelope email in extractEmailData selector (#58)
+  extractEmailData() interpolated the envelope email straight into a .gD[email="..."] attribute selector. An address containing a quote or bracket would break the selector (querySelector throws, or matches something unintended). The other two selectors built from the envelope email already use CSS.escape().
+- [16bfcf2](https://github.com/lankeami/gmail-sender-info/commit/16bfcf258302087ffdd506f34d10d3c57255cabd) Key sender info cache by domain instead of full email (#57)
+  Cached sender info is now stored per sending domain rather than per full address, so one lookup serves every sender at that domain.
+- [7caf429](https://github.com/lankeami/gmail-sender-info/commit/7caf4298f40ac7bc83b75dbeb9f7280fbbc8da8e) Align privacy policy and store docs with actual data handling (#56)
+  The privacy policy said the extension never reads email body content and never contacts non-Google servers. The optional on-device AI check reads the open email's subject, up to 2000 characters of body, and up to 20 links, and the browser loads BIMI logos and favicon.ico files directly from sender-controlled hosts.
+
 ## 2026-10-20
 
 - [d5cdd18](https://github.com/lankeami/gmail-sender-info/commit/d5cdd18a1a288f534aae6544f0591113a68ab0e6) chore: bump manifest version to 2026.1020.1117
