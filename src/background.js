@@ -42,6 +42,18 @@ function getRootDomain(domain) {
 }
 
 /**
+ * True only for absolute https: URLs. The BIMI logo URL is attacker-controlled
+ * (it comes from the sender's DNS), so anything else is rejected.
+ */
+function isHttpsUrl(value) {
+  try {
+    return new URL(value).protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Lookup BIMI TXT record for a domain via DNS-over-HTTPS.
  * Returns the logo URL (l= tag) or null.
  */
@@ -63,8 +75,9 @@ async function lookupBimi(domain) {
       const match = txt.match(/l=(\S+)/i);
       if (match && match[1]) {
         const logoUrl = match[1].replace(/;$/, '');
-        // BIMI logos should be SVG
-        if (logoUrl.endsWith('.svg')) return logoUrl;
+        // BIMI logos must be SVG served over https. The URL comes from the
+        // sender's DNS, so reject http:, data:, javascript: and the like.
+        if (isHttpsUrl(logoUrl) && logoUrl.endsWith('.svg')) return logoUrl;
       }
     }
   } catch (e) {

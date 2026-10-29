@@ -81,7 +81,7 @@ window.addEventListener('message', async (event) => {
       window.postMessage({
         type: 'gsi-headers-result', requestId,
         error: `HTTP ${resp.status}${ik ? '' : ', no ik found'}`,
-      }, '*');
+      }, window.location.origin);
       return;
     }
 
@@ -139,18 +139,18 @@ window.addEventListener('message', async (event) => {
       }
 
       if (Object.keys(authData).length > 0) {
-        window.postMessage({ type: 'gsi-headers-result', requestId, authData }, '*');
+        window.postMessage({ type: 'gsi-headers-result', requestId, authData }, window.location.origin);
       } else {
         // Send a debug snippet so we can see the actual format
         const snippet = stripped.substring(0, 3000).replace(/\s+/g, ' ');
-        window.postMessage({ type: 'gsi-headers-result', requestId, error: 'no auth data in HTML', debug: snippet }, '*');
+        window.postMessage({ type: 'gsi-headers-result', requestId, error: 'no auth data in HTML', debug: snippet }, window.location.origin);
       }
       return;
     }
 
-    window.postMessage({ type: 'gsi-headers-result', requestId, headers }, '*');
+    window.postMessage({ type: 'gsi-headers-result', requestId, headers }, window.location.origin);
   } catch (e) {
-    window.postMessage({ type: 'gsi-headers-result', requestId, error: e.message || 'fetch failed' }, '*');
+    window.postMessage({ type: 'gsi-headers-result', requestId, error: e.message || 'fetch failed' }, window.location.origin);
   }
 });
 
@@ -348,7 +348,7 @@ window.addEventListener('message', async (event) => {
   }
   const hasApi = hasGlobal || hasWindowAi;
   console.log('[GSI] AI check:', { hasGlobal, hasWindowAi, status, statusError, createError, available });
-  window.postMessage({ type: 'gsi-ai-available-result', requestId, available, hasApi, status, statusError, createError }, '*');
+  window.postMessage({ type: 'gsi-ai-available-result', requestId, available, hasApi, status, statusError, createError }, window.location.origin);
 });
 
 // User-gesture-triggered download — Chrome requires a click to start the model download
@@ -362,7 +362,7 @@ window.addEventListener('message', async (event) => {
       ? window.ai.languageModel.create.bind(window.ai.languageModel)
       : null;
   if (!createFn) {
-    window.postMessage({ type: 'gsi-ai-download-result', requestId, ready: false, error: 'AI API not available' }, '*');
+    window.postMessage({ type: 'gsi-ai-download-result', requestId, ready: false, error: 'AI API not available' }, window.location.origin);
     return;
   }
   try {
@@ -378,10 +378,10 @@ window.addEventListener('message', async (event) => {
       session.destroy();
       aiAvailable = true;
     }
-    window.postMessage({ type: 'gsi-ai-download-result', requestId, ready: true }, '*');
+    window.postMessage({ type: 'gsi-ai-download-result', requestId, ready: true }, window.location.origin);
   } catch (e) {
     const msg = e.message === 'timeout' ? 'Download timed out — try again later' : e.message;
-    window.postMessage({ type: 'gsi-ai-download-result', requestId, ready: false, error: msg }, '*');
+    window.postMessage({ type: 'gsi-ai-download-result', requestId, ready: false, error: msg }, window.location.origin);
   }
 });
 
@@ -391,7 +391,7 @@ window.addEventListener('message', async (event) => {
   const { requestId, data, skipCache } = event.data;
 
   if (!data || !data.senderEmail) {
-    window.postMessage({ type: 'gsi-ai-analysis-result', requestId, error: 'Missing email data' }, '*');
+    window.postMessage({ type: 'gsi-ai-analysis-result', requestId, error: 'Missing email data' }, window.location.origin);
     return;
   }
 
@@ -401,7 +401,7 @@ window.addEventListener('message', async (event) => {
   if (skipCache) aiResultCache.delete(cacheKey);
   const cached = aiResultCache.get(cacheKey);
   if (cached) {
-    window.postMessage({ type: 'gsi-ai-analysis-result', requestId, ...cached, debug: { ...cached.debug, cached: true } }, '*');
+    window.postMessage({ type: 'gsi-ai-analysis-result', requestId, ...cached, debug: { ...cached.debug, cached: true } }, window.location.origin);
     return;
   }
 
@@ -424,16 +424,16 @@ window.addEventListener('message', async (event) => {
   try {
     const available = await checkAiAvailableLocal();
     if (!available) {
-      window.postMessage({ type: 'gsi-ai-analysis-result', requestId, unavailable: true }, '*');
+      window.postMessage({ type: 'gsi-ai-analysis-result', requestId, unavailable: true }, window.location.origin);
       return;
     }
     const session = await getAiSession();
     if (!session) {
-      window.postMessage({ type: 'gsi-ai-analysis-result', requestId, unavailable: true }, '*');
+      window.postMessage({ type: 'gsi-ai-analysis-result', requestId, unavailable: true }, window.location.origin);
       return;
     }
     const response = await runPrompt(session, false);
-    window.postMessage({ type: 'gsi-ai-analysis-result', requestId, ...response }, '*');
+    window.postMessage({ type: 'gsi-ai-analysis-result', requestId, ...response }, window.location.origin);
   } catch (e) {
     if (aiSession) {
       aiSession = null;
@@ -441,7 +441,7 @@ window.addEventListener('message', async (event) => {
         const session = await getAiSession();
         if (session) {
           const response = await runPrompt(session, true);
-          window.postMessage({ type: 'gsi-ai-analysis-result', requestId, ...response }, '*');
+          window.postMessage({ type: 'gsi-ai-analysis-result', requestId, ...response }, window.location.origin);
           return;
         }
       } catch { /* fall through */ }
@@ -450,6 +450,6 @@ window.addEventListener('message', async (event) => {
       type: 'gsi-ai-analysis-result', requestId,
       verdict: null, summary: '', reasons: [], parseError: e.message || 'unknown error',
       debug: { error: e.message || 'unknown error' },
-    }, '*');
+    }, window.location.origin);
   }
 });

@@ -302,7 +302,7 @@
     return new Promise((resolve) => {
       const requestId = ++headerRequestId;
       pendingHeaderRequests.set(requestId, resolve);
-      window.postMessage({ type: 'gsi-fetch-headers', messageId, requestId }, '*');
+      window.postMessage({ type: 'gsi-fetch-headers', messageId, requestId }, window.location.origin);
 
       // Timeout after 10 seconds
       setTimeout(() => {
@@ -895,7 +895,7 @@
       pendingAiRequests.set(requestId, (resp) => {
         resolve({ ...resp, chromeVersion: getChromeVersion() });
       });
-      window.postMessage({ type: 'gsi-check-ai', requestId }, '*');
+      window.postMessage({ type: 'gsi-check-ai', requestId }, window.location.origin);
       // Must outlive page-fetch's 10s create() verification or a slow cold
       // model load reports as unavailable
       setTimeout(() => {
@@ -929,7 +929,7 @@
         if (resp.unavailable) resolve(null);
         else resolve(resp);
       });
-      window.postMessage({ type: 'gsi-analyze-email', requestId, data: emailData, skipCache }, '*');
+      window.postMessage({ type: 'gsi-analyze-email', requestId, data: emailData, skipCache }, window.location.origin);
     });
   }
 
@@ -1528,7 +1528,7 @@
                 hint.textContent = (resp.error || 'Download failed') + ' — ';
               }
             });
-            window.postMessage({ type: 'gsi-download-ai', requestId: reqId }, '*');
+            window.postMessage({ type: 'gsi-download-ai', requestId: reqId }, window.location.origin);
           });
           aiLineText.appendChild(hint);
           aiLineText.appendChild(enableBtn);
