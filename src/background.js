@@ -346,14 +346,22 @@ async function resolveLogo(fullDomain) {
 }
 
 // --- Cache helpers ---
+// Results depend only on the sender's domain, so the cache is keyed by domain
+// (one entry per domain, not per address). The prefix keeps cache entries
+// apart from the gsi_* bookkeeping keys stored in the same area.
 
-async function getCached(email) {
+function cacheKey(domain) {
+  return `gsi_cache:${domain}`;
+}
+
+async function getCached(domain) {
+  const key = cacheKey(domain);
   try {
-    const result = await chrome.storage.local.get(email);
-    const entry = result[email];
+    const result = await chrome.storage.local.get(key);
+    const entry = result[key];
     if (!entry) return null;
     if (Date.now() - entry.ts > CACHE_TTL_MS) {
-      chrome.storage.local.remove(email);
+      chrome.storage.local.remove(key);
       return null;
     }
     return entry.data;
@@ -362,9 +370,9 @@ async function getCached(email) {
   }
 }
 
-async function setCache(email, data) {
+async function setCache(domain, data) {
   try {
-    await chrome.storage.local.set({ [email]: { data, ts: Date.now() } });
+    await chrome.storage.local.set({ [cacheKey(domain)]: { data, ts: Date.now() } });
   } catch {
     // Storage full or unavailable — continue without caching
   }
@@ -392,17 +400,21 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     }
 
     const domain = email.split('@')[1];
+    if (!domain) {
+      sendResponse({ error: 'Invalid email' });
+      return false;
+    }
 
     (async () => {
       // Check cache first
-      const cached = await getCached(email);
+      const cached = await getCached(domain);
       if (cached) {
         sendResponse(cached);
         return;
       }
 
       const info = await resolveLogo(domain);
-      await setCache(email, info);
+      await setCache(domain, info);
       chrome.storage.local.get('gsi_first_use_time', (r) => {
         if (!r.gsi_first_use_time) chrome.storage.local.set({ gsi_first_use_time: Date.now() });
       });

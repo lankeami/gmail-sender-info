@@ -60,7 +60,7 @@ Email headers are fetched using a MAIN-world content script (`page-fetch.js`) th
 
 ### Caching
 
-- Results are stored in `chrome.storage.local` keyed by email address with a 24-hour TTL.
+- Results are stored in `chrome.storage.local` keyed by sender domain (`gsi_cache:<domain>`) with a 24-hour TTL.
 - Stale entries are evicted on read. All cache is cleared on extension install or update.
 - In-memory request deduplication prevents redundant concurrent lookups for the same email.
 
