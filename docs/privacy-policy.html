@@ -100,7 +100,7 @@
     <p>No data is sent to any analytics, advertising, or tracking service. Apart from the sender-hosted images described above, the Extension does not communicate with any non-Google server.</p>
 
     <h2>4. Data Storage</h2>
-    <p>Lookup results (domain names, logo URLs, favicon URLs, and the country name derived from the domain's ending) are cached locally in your browser using Chrome's <code>storage.local</code> API. Each cache entry is stored under the sender's email address, so the sender's email address is kept in your browser's local storage while the entry exists. Cache entries expire after <strong>24 hours</strong> and are cleared when the Extension is installed or updated.</p>
+    <p>Lookup results (domain names, logo URLs, favicon URLs, and the country name derived from the domain's ending) are cached locally in your browser using Chrome's <code>storage.local</code> API. Each cache entry is stored under the sender's domain (for example, <code>example.com</code>), not the full email address, so no email address is kept in the cache. Cache entries expire after <strong>24 hours</strong> and are cleared when the Extension is installed or updated.</p>
     <p>The Extension also stores a few small values that are kept across updates so it can decide when to show an occasional request for a Chrome Web Store review: the time of first use, a count of emails viewed, and whether you dismissed or clicked the request.</p>
     <p>No data is stored outside your browser.</p>
 

@@ -6,7 +6,7 @@ Copy each justification into the corresponding field on the Developer Dashboard.
 
 ### storage
 
-Caches sender logo and favicon lookup results locally with a 24-hour TTL to avoid redundant DNS and network requests. Each cached entry (domain names, logo and favicon URLs, derived country) is stored under the sender's email address. The cache is cleared on extension install or update. Also stores a few small values that are kept across updates to decide when to show an occasional review request: first-use time, a count of emails viewed, and whether the request was dismissed or clicked. Nothing is stored outside the browser.
+Caches sender logo and favicon lookup results locally with a 24-hour TTL to avoid redundant DNS and network requests. Each cached entry (domain names, logo and favicon URLs, derived country) is stored under the sender's domain, not the full email address. The cache is cleared on extension install or update. Also stores a few small values that are kept across updates to decide when to show an occasional review request: first-use time, a count of emails viewed, and whether the request was dismissed or clicked. Nothing is stored outside the browser.
 
 ## Host Permissions
 
