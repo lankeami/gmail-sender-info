@@ -29,21 +29,41 @@
   </header>
   <main>
     <h1>Privacy Policy</h1>
-    <p class="subtitle">Effective date: February 14, 2026</p>
+    <p class="subtitle">Effective date: October 28, 2026</p>
 
     <p>Gmail Sender Info ("the Extension") is a Chrome browser extension that displays sender domain information, brand logos, and email authentication results in Gmail. This policy describes what data the Extension accesses, how it is used, and your rights.</p>
 
     <h2>1. Data the Extension Accesses</h2>
-    <p>The Extension processes the following data <strong>locally in your browser</strong>:</p>
+    <p>The Extension reads the following data from the Gmail page you have open. All of it is processed <strong>locally in your browser</strong>; the Extension has no server of its own and sends nothing to its developer.</p>
     <ul>
-      <li><strong>Sender email addresses</strong> — extracted from the Gmail page to look up domain and logo information.</li>
-      <li><strong>Email headers</strong> — fetched from Gmail's own servers using your existing session to check SPF, DKIM, and DMARC authentication results.</li>
+      <li><strong>Sender email addresses and display names</strong> — read from the Gmail page to look up domain and logo information.</li>
+      <li><strong>Email headers</strong> — fetched from Gmail's own servers using your existing session to check SPF, DKIM, and DMARC authentication results. The Extension also reads the To, Cc, Bcc, Reply-To, and Delivered-To headers from the same response, to detect when you were BCC'd and when replies would go to a different domain than the sender.</li>
       <li><strong>Sender domain names</strong> — derived from email addresses to perform BIMI DNS lookups and favicon resolution.</li>
+      <li><strong>Email content for the optional AI check</strong> — the subject, up to the first 2,000 characters of the body text of the email you have open, and up to 20 links from the body (link address and the first 100 characters of link text). See Section 2 for details.</li>
     </ul>
-    <p>The Extension does <strong>not</strong> access email body content, attachments, contacts, or any other personal information.</p>
+    <p>The Extension does <strong>not</strong> read attachments or your contacts, and it does not read emails you have not opened. It does not read the body of an email except for the AI check described in Section 2.</p>
 
-    <h2>2. External Services</h2>
-    <p>The Extension communicates only with Google-operated services:</p>
+    <h2>2. Optional On-Device AI Check</h2>
+    <p>In Chrome 138 or later, when the built-in AI model (Gemini Nano, through Chrome's Prompt API) is available on your computer, the Extension uses it to add an advisory Ok / Caution / Reject verdict to the banner shown when you open an email. If the model is not available, this check does not run and the rest of the Extension works normally.</p>
+    <p>When the check runs, the Extension builds a short prompt and gives it to Chrome's built-in model. The prompt contains:</p>
+    <table>
+      <thead>
+        <tr><th>What is read</th><th>Source</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>Sender display name and sender email address</td><td>The open email in Gmail</td></tr>
+        <tr><td>Subject</td><td>The open email in Gmail</td></tr>
+        <tr><td>Body text, up to the first 2,000 characters</td><td>The open email in Gmail</td></tr>
+        <tr><td>Up to 20 links from the body (link address and up to 100 characters of link text)</td><td>The open email in Gmail</td></tr>
+        <tr><td>Whether you were BCC'd, whether the body is empty, and the Reply-To address and domain if they differ from the sender's domain</td><td>Email headers and body</td></tr>
+        <tr><td>SPF, DKIM, and DMARC results</td><td>Email headers</td></tr>
+      </tbody>
+    </table>
+    <p>The model runs on your device through Chrome. The Extension does not send this prompt, or the model's answer, to the developer or to any server. The prompt and the result are passed between the Extension's two scripts using the browser's <code>window.postMessage</code> inside your Gmail tab, so they are visible to code running in that Gmail page, which can already see the email itself. The result is kept in memory for the life of the Gmail tab and is not written to <code>storage.local</code>. The expanded banner's debug section shows the beginning of the prompt that was used, on your screen only.</p>
+    <p>If Chrome reports that the model can be downloaded, the Extension shows an "Enable local AI model" button. Clicking it asks Chrome to download the model. Chrome performs that download under its own terms and privacy practices; the Extension does not receive the model or send email data as part of it.</p>
+
+    <h2>3. External Services</h2>
+    <p>The Extension itself makes requests only to Google-operated services and to your own Gmail session:</p>
     <table>
       <thead>
         <tr><th>Service</th><th>Data Sent</th><th>Purpose</th></tr>
@@ -51,16 +71,16 @@
       <tbody>
         <tr>
           <td>Google DNS-over-HTTPS (<code>dns.google</code>)</td>
-          <td>Sender domain name</td>
+          <td>Sender domain name (as a <code>default._bimi.&lt;domain&gt;</code> lookup)</td>
           <td>Look up BIMI TXT records to find verified brand logos</td>
         </tr>
         <tr>
-          <td>Google Favicon Service</td>
+          <td>Google Favicon Service (<code>www.google.com/s2/favicons</code>)</td>
           <td>Sender domain name</td>
           <td>Retrieve website favicons for sender domains</td>
         </tr>
         <tr>
-          <td>gstatic Favicon V2</td>
+          <td>gstatic Favicon V2 (<code>t0.gstatic.com</code>)</td>
           <td>Sender domain name</td>
           <td>Detect whether a real favicon exists (vs. generic globe icon)</td>
         </tr>
@@ -71,22 +91,30 @@
         </tr>
       </tbody>
     </table>
-    <p>No data is sent to any third-party analytics, advertising, or tracking service. The Extension does not communicate with any non-Google server.</p>
+    <p>Sender domains can also lead your browser to load images directly from the sender's side. These requests are made by your browser when the image is displayed, the same way any image on a web page is loaded:</p>
+    <ul>
+      <li><strong>BIMI logo.</strong> If a sender's DNS publishes a BIMI record, the logo address in that record is loaded as an image. That address is chosen by the sender's domain and can be on any host.</li>
+      <li><strong><code>https://&lt;sender-domain&gt;/favicon.ico</code>.</strong> Used when Google's favicon image does not load or is only the generic globe icon, and shown in the expanded details panel.</li>
+    </ul>
+    <p>When your browser loads one of these images, the host serving it can see that an image was requested, along with the usual information in any web request such as your IP address. This tells the sender's host that someone using this Extension displayed that sender's email or its tooltip. The Extension does not add any identifier to these requests.</p>
+    <p>No data is sent to any analytics, advertising, or tracking service. Apart from the sender-hosted images described above, the Extension does not communicate with any non-Google server.</p>
 
-    <h2>3. Data Storage</h2>
-    <p>Lookup results (domain names, logo URLs, and favicon URLs) are cached locally in your browser using Chrome's <code>storage.local</code> API. Cache entries expire after <strong>24 hours</strong> and are automatically cleared when the Extension is installed or updated. No data is stored outside your browser.</p>
+    <h2>4. Data Storage</h2>
+    <p>Lookup results (domain names, logo URLs, favicon URLs, and the country name derived from the domain's ending) are cached locally in your browser using Chrome's <code>storage.local</code> API. Each cache entry is stored under the sender's email address, so the sender's email address is kept in your browser's local storage while the entry exists. Cache entries expire after <strong>24 hours</strong> and are cleared when the Extension is installed or updated.</p>
+    <p>The Extension also stores a few small values that are kept across updates so it can decide when to show an occasional request for a Chrome Web Store review: the time of first use, a count of emails viewed, and whether you dismissed or clicked the request.</p>
+    <p>No data is stored outside your browser.</p>
 
-    <h2>4. Data Collection</h2>
-    <p>The Extension does <strong>not</strong> collect, transmit, or store any personal data on external servers. Specifically:</p>
+    <h2>5. Data Collection</h2>
+    <p>The Extension does <strong>not</strong> collect or transmit personal data to the developer or to any server operated by the developer. Specifically:</p>
     <ul>
       <li>No analytics or telemetry</li>
       <li>No user accounts or identifiers</li>
       <li>No tracking pixels, beacons, or cookies</li>
-      <li>No behavioral data (clicks, page views, interaction patterns)</li>
-      <li>No email content or attachments</li>
+      <li>No behavioral data sent anywhere (clicks, page views, interaction patterns)</li>
+      <li>No email content or attachments sent anywhere. The email content used by the AI check stays on your device (Section 2).</li>
     </ul>
 
-    <h2>5. Permissions</h2>
+    <h2>6. Permissions</h2>
     <table>
       <thead>
         <tr><th>Permission</th><th>Why It's Needed</th></tr>
@@ -108,23 +136,23 @@
     </table>
     <p>The Extension does not request access to browsing history, cookies, bookmarks, or any broad host permissions.</p>
 
-    <h2>6. Data Sharing</h2>
-    <p>The Extension does not sell, trade, or transfer any user data to third parties. No data leaves your browser except the domain-name queries to Google services described in Section 2.</p>
+    <h2>7. Data Sharing</h2>
+    <p>The Extension does not sell, trade, or transfer any user data to third parties. The only data that leaves your browser is what is described in Section 3: sender domain names sent to Google services, and image requests that your browser makes to sender-hosted logo and favicon addresses. Email body text and the other AI check inputs stay on your device.</p>
 
-    <h2>7. Security</h2>
+    <h2>8. Security</h2>
     <ul>
       <li>All DOM elements are created programmatically — no untrusted HTML injection.</li>
       <li>Input validation rejects malformed email addresses before processing.</li>
       <li>Header fetches use your existing Gmail session (same-origin); no additional credentials are stored or transmitted.</li>
     </ul>
 
-    <h2>8. Children's Privacy</h2>
+    <h2>9. Children's Privacy</h2>
     <p>The Extension is not directed at children under 13 and does not knowingly collect any personal information from children.</p>
 
-    <h2>9. Changes to This Policy</h2>
+    <h2>10. Changes to This Policy</h2>
     <p>If this policy is updated, the revised version will be posted at this URL with an updated effective date. Material changes will be noted in the Extension's update notes on the Chrome Web Store.</p>
 
-    <h2>10. Contact</h2>
+    <h2>11. Contact</h2>
     <p>If you have questions about this privacy policy, please open an issue on the <a href="https://github.com/lankeami/gmail-sender-info/issues">GitHub repository</a>.</p>
   </main>
   <footer>

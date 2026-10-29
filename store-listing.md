@@ -32,7 +32,8 @@ What you get:
 Privacy-first design:
 
 • Only two permissions: local storage for caching and DNS lookups for BIMI
-• No data sent to third-party services — all lookups use Google's own DNS and favicon services
+• Lookups use Google's own DNS and favicon services; your browser may also load a sender's own logo or favicon image, which lets that sender's host see the image request
+• Optional on-device AI check (Chrome's built-in Gemini Nano, Chrome 138+) reads the open email's subject, up to 2,000 characters of body, and links; it runs on your device and nothing is sent to us or any server
 • Email headers are read using Gmail's existing session — no extra cookie or host permissions needed
 • No analytics, no tracking, no account creation
 • Results cached locally for 24 hours, cleared on every update
