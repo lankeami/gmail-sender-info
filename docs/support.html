@@ -58,12 +58,12 @@
 
     <div class="faq-item">
       <p class="faq-q">Does the extension read my emails?</p>
-      <p>No. The extension only reads <strong>email headers</strong> (the technical metadata about how the email was delivered) to check SPF, DKIM, and DMARC results. It never accesses the body, attachments, or content of your emails.</p>
+      <p>Only for the email you have open, and only on your device. The extension reads <strong>email headers</strong> (the technical metadata about how the email was delivered) to check SPF, DKIM, and DMARC results. If Chrome's built-in AI model is available, the optional AI check also reads the subject, up to the first 2,000 characters of the body, and up to 20 links of that email, and processes them on your device. None of this is sent to the developer or to any server. It never reads attachments. See the <a href="privacy-policy.html">Privacy Policy</a> for details.</p>
     </div>
 
     <div class="faq-item">
       <p class="faq-q">Does the extension send my data anywhere?</p>
-      <p>The extension sends sender domain names to Google's DNS service (for BIMI lookups) and Google's favicon service (for logos). No data is sent to any third-party or non-Google service. See the <a href="privacy-policy.html">Privacy Policy</a> for details.</p>
+      <p>The extension sends sender domain names to Google's DNS service (for BIMI lookups) and Google's favicon service (for logos). Your browser may also load a sender's BIMI logo or <code>favicon.ico</code> directly from the sender's own host, which lets that host see the image request. No data is sent to any analytics, advertising, or tracking service. See the <a href="privacy-policy.html">Privacy Policy</a> for details.</p>
     </div>
 
     <div class="faq-item">
