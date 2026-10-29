@@ -829,7 +829,7 @@
    */
   function extractEmailData(envelopeEmail) {
     // Scope selectors to the specific message container (conversation view safety)
-    const senderSelector = envelopeEmail ? `.gD[email="${envelopeEmail}"]` : '.gD[email]';
+    const senderSelector = envelopeEmail ? `.gD[email="${CSS.escape(envelopeEmail)}"]` : '.gD[email]';
     let senderEl = document.querySelector(senderSelector);
     if (!senderEl) senderEl = document.querySelector('.gD[email]');
     const displayName = senderEl ? senderEl.textContent.trim() : '';
