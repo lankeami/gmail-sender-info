@@ -37,7 +37,7 @@ Chrome extension that displays sender domain information and email authenticatio
 | gstatic Favicon V2 | `https://t0.gstatic.com/faviconV2` | Detects generic globe icons (no real favicon exists) |
 | Gmail `view=om` endpoint | `https://mail.google.com/mail/u/{n}/?view=om` | Fetches raw email headers for authentication checks |
 
-No data is sent to any third-party analytics, tracking, or non-Google service.
+No data is sent to any analytics, advertising, or tracking service. Apart from these, your browser may load a sender's BIMI logo or `https://<sender-domain>/favicon.ico` directly from the sender's host when displaying the logo, which reveals to that host that the image was requested. The optional AI check (see section 4) reads the open email's subject, up to 2000 characters of body, and up to 20 links, and processes them on-device only.
 
 ## Security Measures
 
