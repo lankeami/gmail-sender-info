@@ -56,6 +56,7 @@ gmail-sender-info/
 
 - `storage` — Cache BIMI/favicon results (24h TTL)
 - `https://dns.google/*` — BIMI DNS-over-HTTPS lookups
+- `https://*.gstatic.com/*` — Fetch Google's faviconV2 image to detect the generic globe icon
 
 ## Documentation
 
