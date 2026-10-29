@@ -13,7 +13,7 @@
 - [16bfcf2](https://github.com/lankeami/gmail-sender-info/commit/16bfcf258302087ffdd506f34d10d3c57255cabd) Key sender info cache by domain instead of full email (#57)
   Cached sender info is now stored per sending domain rather than per full address, so one lookup serves every sender at that domain.
 - [7caf429](https://github.com/lankeami/gmail-sender-info/commit/7caf4298f40ac7bc83b75dbeb9f7280fbbc8da8e) Align privacy policy and store docs with actual data handling (#56)
-  The privacy policy said the extension never reads email body content and never contacts non-Google servers. The optional on-device AI check reads the open email's subject, up to 2000 characters of body, and up to 20 links, and the browser loads BIMI logos and favicon.ico files directly from sender-controlled hosts.
+  The privacy policy said the extension never reads email body content and never contacts non-Google servers. The on-device AI check, which runs automatically when Chrome's Gemini Nano is available, reads the open email's subject, up to 2000 characters of body, and up to 20 links, and the browser loads BIMI logos and favicon.ico files directly from sender-controlled hosts.
 
 ## 2026-10-20
 
