@@ -25,6 +25,18 @@ function extractFunction(source, name) {
 
 // eval is safe here: input is this repo's own committed source.
 const gmailFromSearchHref = eval('(' + extractFunction(src, 'gmailFromSearchHref') + ')');
+const gmailSenderSearchHref = eval('(' + extractFunction(src, 'gmailSenderSearchHref') + ')');
+
+// Minimal DOM stub for createProfileLink().
+function makeEl(tag) {
+  const el = { tagName: tag, children: [], classes: new Set(), removed: false,
+    classList: { add(c) { el.classes.add(c); } },
+    appendChild(c) { el.children.push(c); c.parent = el; },
+    remove() { el.removed = true; } };
+  return el;
+}
+const document = { createElement: makeEl };
+const createProfileLink = eval('(' + extractFunction(src, 'createProfileLink') + ')');
 
 let passed = 0;
 let failed = 0;
@@ -41,8 +53,26 @@ check('subdomain keeps exact from:@domain',
 check('domain is URI-encoded',
   gmailFromSearchHref('a b.com', true) === base + 'from%3A*a%20b.com');
 
-check('no hard-coded from: search URLs left outside the helper',
-  (src.match(/#search\/from/g) || []).length === 1);
+check('sender search uses the exact address',
+  gmailSenderSearchHref('jane@mail.example.com') === base + 'from%3Ajane%40mail.example.com');
+
+const link = createProfileLink('https://img/x.png', 'Jane', 'jane@example.com');
+const img = link.children[0];
+check('profile image is wrapped in a link', link.tagName === 'a' && img && img.tagName === 'img');
+check('profile link searches that sender', link.href === base + 'from%3Ajane%40example.com' && link.target === '_top');
+check('img keeps gsi-profile-img class, link has gsi-profile-link',
+  img.classes.has('gsi-profile-img') && link.classes.has('gsi-profile-link'));
+check('img src/alt/size set', img.src === 'https://img/x.png' && img.alt === 'Jane' && img.width === 20 && img.height === 20);
+img.onerror();
+check('failed image removes the whole link', link.removed === true);
+
+check('both profile image sites use createProfileLink',
+  (src.match(/createProfileLink\(/g) || []).length === 3);
+check('old profile lookup also finds the link wrapper',
+  (src.match(/querySelector\('\.gsi-profile-link, \.gsi-profile-img'\)/g) || []).length === 2);
+
+check('no hard-coded from: search URLs left outside the helpers',
+  (src.match(/#search\/from/g) || []).length === 2);
 check('strip domain link wildcards only when it is the root domain',
   src.includes('domainLink.href = gmailFromSearchHref(info.fullDomain, info.rootDomain === info.fullDomain);'));
 check('restored domain link uses the same rule',

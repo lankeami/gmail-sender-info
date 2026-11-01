@@ -995,6 +995,33 @@
 
   let currentBannerEmail = null;
 
+  /** Gmail search link for mail from one exact sender address. */
+  function gmailSenderSearchHref(email) {
+    return `https://mail.google.com/mail/u/0/#search/from%3A${encodeURIComponent(email)}`;
+  }
+
+  /**
+   * Sender profile image wrapped in a link to a Gmail search for that sender.
+   * The <img> keeps the gsi-profile-img class (styling, retry checks); the
+   * whole link is removed if the image fails to load.
+   */
+  function createProfileLink(url, alt, email) {
+    const link = document.createElement('a');
+    link.classList.add('gsi-profile-link');
+    link.href = gmailSenderSearchHref(email);
+    link.target = '_top';
+    link.title = `Search mail from ${email}`;
+    const img = document.createElement('img');
+    img.classList.add('gsi-profile-img');
+    img.src = url;
+    img.width = 20;
+    img.height = 20;
+    img.alt = alt;
+    img.onerror = () => link.remove();
+    link.appendChild(img);
+    return link;
+  }
+
   /**
    * Gmail search link for mail from a domain. A root domain (e.g. example.com)
    * uses from:*domain so subdomain senders (mail.example.com) are included;
@@ -1190,15 +1217,9 @@
       const result = extractProfileImageUrl(envelopeEmail);
       banner.__gsiProfileDebug = result.debug;
       if (result.url) {
-        const old = stripRow.querySelector('.gsi-profile-img');
+        const old = stripRow.querySelector('.gsi-profile-link, .gsi-profile-img');
         if (old) old.remove();
-        const profileImg = document.createElement('img');
-        profileImg.classList.add('gsi-profile-img');
-        profileImg.src = result.url;
-        profileImg.width = 20;
-        profileImg.height = 20;
-        profileImg.alt = result.debug.dataName || 'Sender profile';
-        profileImg.onerror = () => profileImg.remove();
+        const profileImg = createProfileLink(result.url, result.debug.dataName || 'Sender profile', envelopeEmail);
         // Insert after domain/root spans, before divider
         const firstDivider = stripRow.querySelector('.gsi-strip-divider');
         if (firstDivider) {
@@ -1929,16 +1950,10 @@
         oldLogo.replaceWith(newLogo);
 
         // Update profile image to original sender's photo
-        const oldProfile = stripRowEl.querySelector('.gsi-profile-img');
+        const oldProfile = stripRowEl.querySelector('.gsi-profile-link, .gsi-profile-img');
         const origProfileResult = extractProfileImageUrl(originalSender);
         if (origProfileResult.url) {
-          const profileImg = document.createElement('img');
-          profileImg.classList.add('gsi-profile-img');
-          profileImg.src = origProfileResult.url;
-          profileImg.width = 20;
-          profileImg.height = 20;
-          profileImg.alt = origProfileResult.debug?.dataName || 'Sender profile';
-          profileImg.onerror = () => profileImg.remove();
+          const profileImg = createProfileLink(origProfileResult.url, origProfileResult.debug?.dataName || 'Sender profile', originalSender);
           if (oldProfile) oldProfile.replaceWith(profileImg);
           else {
             const firstDivider = stripRowEl.querySelector('.gsi-strip-divider');

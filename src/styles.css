@@ -56,6 +56,16 @@
   border-radius: 4px;
 }
 
+#gsi-banner .gsi-profile-link {
+  display: inline-flex;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+
+#gsi-banner .gsi-profile-link:hover .gsi-profile-img {
+  border-color: #1a73e8;
+}
+
 #gsi-banner .gsi-profile-img {
   width: 20px;
   height: 20px;
