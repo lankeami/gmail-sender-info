@@ -996,6 +996,16 @@
   let currentBannerEmail = null;
 
   /**
+   * Gmail search link for mail from a domain. A root domain (e.g. example.com)
+   * uses from:*domain so subdomain senders (mail.example.com) are included;
+   * a subdomain keeps the exact from:@domain match.
+   */
+  function gmailFromSearchHref(domain, isRootDomain) {
+    const op = isRootDomain ? '*' : '%40';
+    return `https://mail.google.com/mail/u/0/#search/from%3A${op}${encodeURIComponent(domain)}`;
+  }
+
+  /**
    * Convert ISO 2-letter country code to flag emoji using regional indicator pairs.
    * US → 🇺🇸, GB → 🇬🇧, RU → 🇷🇺, etc.
    */
@@ -1131,22 +1141,22 @@
     });
     stripRow.appendChild(logo);
 
-    // Domain (links to Gmail search for from:@fullDomain)
+    // Domain (Gmail search: from:*domain when it is the root domain, else exact from:@fullDomain)
     const domainSpan = document.createElement('span');
     domainSpan.classList.add('gsi-strip-domain');
     const domainLink = document.createElement('a');
-    domainLink.href = `https://mail.google.com/mail/u/0/#search/from%3A%40${encodeURIComponent(info.fullDomain)}`;
+    domainLink.href = gmailFromSearchHref(info.fullDomain, info.rootDomain === info.fullDomain);
     domainLink.target = '_top';
     domainLink.textContent = info.fullDomain;
     domainSpan.appendChild(domainLink);
     stripRow.appendChild(domainSpan);
 
-    // Root domain (if different, links to Gmail search for from:@rootDomain)
+    // Root domain (if different, links to Gmail search for from:*rootDomain)
     if (info.rootDomain !== info.fullDomain) {
       const rootSpan = document.createElement('span');
       rootSpan.classList.add('gsi-strip-root');
       const rootLink = document.createElement('a');
-      rootLink.href = `https://mail.google.com/mail/u/0/#search/from%3A*${encodeURIComponent(info.rootDomain)}`;
+      rootLink.href = gmailFromSearchHref(info.rootDomain, true);
       rootLink.target = '_top';
       rootLink.textContent = `(${info.rootDomain})`;
       rootSpan.appendChild(rootLink);
@@ -1947,7 +1957,7 @@
           const domainA = domainEl.querySelector('a');
           if (domainA) {
             domainA.textContent = origInfo.fullDomain;
-            domainA.href = `https://mail.google.com/mail/u/0/#search/from%3A%40${encodeURIComponent(origInfo.fullDomain)}`;
+            domainA.href = gmailFromSearchHref(origInfo.fullDomain, origInfo.rootDomain === origInfo.fullDomain);
           } else {
             domainEl.textContent = origInfo.fullDomain;
           }
@@ -1959,7 +1969,7 @@
             const rootA = rootEl.querySelector('a');
             if (rootA) {
               rootA.textContent = `(${origInfo.rootDomain})`;
-              rootA.href = `https://mail.google.com/mail/u/0/#search/from%3A*${encodeURIComponent(origInfo.rootDomain)}`;
+              rootA.href = gmailFromSearchHref(origInfo.rootDomain, true);
             } else {
               rootEl.textContent = `(${origInfo.rootDomain})`;
             }
@@ -1967,7 +1977,7 @@
             const newRoot = document.createElement('span');
             newRoot.classList.add('gsi-strip-root');
             const newRootLink = document.createElement('a');
-            newRootLink.href = `https://mail.google.com/mail/u/0/#search/from%3A*${encodeURIComponent(origInfo.rootDomain)}`;
+            newRootLink.href = gmailFromSearchHref(origInfo.rootDomain, true);
             newRootLink.target = '_top';
             newRootLink.textContent = `(${origInfo.rootDomain})`;
             newRoot.appendChild(newRootLink);
