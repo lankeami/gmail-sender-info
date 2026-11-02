@@ -995,6 +995,43 @@
 
   let currentBannerEmail = null;
 
+  /** Gmail search link for mail from one exact sender address. */
+  function gmailSenderSearchHref(email) {
+    return `https://mail.google.com/mail/u/0/#search/from%3A${encodeURIComponent(email)}`;
+  }
+
+  /**
+   * Sender profile image wrapped in a link to a Gmail search for that sender.
+   * The <img> keeps the gsi-profile-img class (styling, retry checks); the
+   * whole link is removed if the image fails to load.
+   */
+  function createProfileLink(url, alt, email) {
+    const link = document.createElement('a');
+    link.classList.add('gsi-profile-link');
+    link.href = gmailSenderSearchHref(email);
+    link.target = '_top';
+    link.title = `Search mail from ${email}`;
+    const img = document.createElement('img');
+    img.classList.add('gsi-profile-img');
+    img.src = url;
+    img.width = 20;
+    img.height = 20;
+    img.alt = alt;
+    img.onerror = () => link.remove();
+    link.appendChild(img);
+    return link;
+  }
+
+  /**
+   * Gmail search link for mail from a domain. A root domain (e.g. example.com)
+   * uses from:*domain so subdomain senders (mail.example.com) are included;
+   * a subdomain keeps the exact from:@domain match.
+   */
+  function gmailFromSearchHref(domain, isRootDomain) {
+    const op = isRootDomain ? '*' : '%40';
+    return `https://mail.google.com/mail/u/0/#search/from%3A${op}${encodeURIComponent(domain)}`;
+  }
+
   /**
    * Convert ISO 2-letter country code to flag emoji using regional indicator pairs.
    * US → 🇺🇸, GB → 🇬🇧, RU → 🇷🇺, etc.
@@ -1131,22 +1168,22 @@
     });
     stripRow.appendChild(logo);
 
-    // Domain (links to Gmail search for from:@fullDomain)
+    // Domain (Gmail search: from:*domain when it is the root domain, else exact from:@fullDomain)
     const domainSpan = document.createElement('span');
     domainSpan.classList.add('gsi-strip-domain');
     const domainLink = document.createElement('a');
-    domainLink.href = `https://mail.google.com/mail/u/0/#search/from%3A%40${encodeURIComponent(info.fullDomain)}`;
+    domainLink.href = gmailFromSearchHref(info.fullDomain, info.rootDomain === info.fullDomain);
     domainLink.target = '_top';
     domainLink.textContent = info.fullDomain;
     domainSpan.appendChild(domainLink);
     stripRow.appendChild(domainSpan);
 
-    // Root domain (if different, links to Gmail search for from:@rootDomain)
+    // Root domain (if different, links to Gmail search for from:*rootDomain)
     if (info.rootDomain !== info.fullDomain) {
       const rootSpan = document.createElement('span');
       rootSpan.classList.add('gsi-strip-root');
       const rootLink = document.createElement('a');
-      rootLink.href = `https://mail.google.com/mail/u/0/#search/from%3A*${encodeURIComponent(info.rootDomain)}`;
+      rootLink.href = gmailFromSearchHref(info.rootDomain, true);
       rootLink.target = '_top';
       rootLink.textContent = `(${info.rootDomain})`;
       rootSpan.appendChild(rootLink);
@@ -1180,15 +1217,9 @@
       const result = extractProfileImageUrl(envelopeEmail);
       banner.__gsiProfileDebug = result.debug;
       if (result.url) {
-        const old = stripRow.querySelector('.gsi-profile-img');
+        const old = stripRow.querySelector('.gsi-profile-link, .gsi-profile-img');
         if (old) old.remove();
-        const profileImg = document.createElement('img');
-        profileImg.classList.add('gsi-profile-img');
-        profileImg.src = result.url;
-        profileImg.width = 20;
-        profileImg.height = 20;
-        profileImg.alt = result.debug.dataName || 'Sender profile';
-        profileImg.onerror = () => profileImg.remove();
+        const profileImg = createProfileLink(result.url, result.debug.dataName || 'Sender profile', envelopeEmail);
         // Insert after domain/root spans, before divider
         const firstDivider = stripRow.querySelector('.gsi-strip-divider');
         if (firstDivider) {
@@ -1919,16 +1950,10 @@
         oldLogo.replaceWith(newLogo);
 
         // Update profile image to original sender's photo
-        const oldProfile = stripRowEl.querySelector('.gsi-profile-img');
+        const oldProfile = stripRowEl.querySelector('.gsi-profile-link, .gsi-profile-img');
         const origProfileResult = extractProfileImageUrl(originalSender);
         if (origProfileResult.url) {
-          const profileImg = document.createElement('img');
-          profileImg.classList.add('gsi-profile-img');
-          profileImg.src = origProfileResult.url;
-          profileImg.width = 20;
-          profileImg.height = 20;
-          profileImg.alt = origProfileResult.debug?.dataName || 'Sender profile';
-          profileImg.onerror = () => profileImg.remove();
+          const profileImg = createProfileLink(origProfileResult.url, origProfileResult.debug?.dataName || 'Sender profile', originalSender);
           if (oldProfile) oldProfile.replaceWith(profileImg);
           else {
             const firstDivider = stripRowEl.querySelector('.gsi-strip-divider');
@@ -1947,7 +1972,7 @@
           const domainA = domainEl.querySelector('a');
           if (domainA) {
             domainA.textContent = origInfo.fullDomain;
-            domainA.href = `https://mail.google.com/mail/u/0/#search/from%3A%40${encodeURIComponent(origInfo.fullDomain)}`;
+            domainA.href = gmailFromSearchHref(origInfo.fullDomain, origInfo.rootDomain === origInfo.fullDomain);
           } else {
             domainEl.textContent = origInfo.fullDomain;
           }
@@ -1959,7 +1984,7 @@
             const rootA = rootEl.querySelector('a');
             if (rootA) {
               rootA.textContent = `(${origInfo.rootDomain})`;
-              rootA.href = `https://mail.google.com/mail/u/0/#search/from%3A*${encodeURIComponent(origInfo.rootDomain)}`;
+              rootA.href = gmailFromSearchHref(origInfo.rootDomain, true);
             } else {
               rootEl.textContent = `(${origInfo.rootDomain})`;
             }
@@ -1967,7 +1992,7 @@
             const newRoot = document.createElement('span');
             newRoot.classList.add('gsi-strip-root');
             const newRootLink = document.createElement('a');
-            newRootLink.href = `https://mail.google.com/mail/u/0/#search/from%3A*${encodeURIComponent(origInfo.rootDomain)}`;
+            newRootLink.href = gmailFromSearchHref(origInfo.rootDomain, true);
             newRootLink.target = '_top';
             newRootLink.textContent = `(${origInfo.rootDomain})`;
             newRoot.appendChild(newRootLink);
