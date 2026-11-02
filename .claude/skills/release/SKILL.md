@@ -12,7 +12,7 @@ Create a release for **gmail-sender-info** using a date-based version.
 
 1. Generate two version strings:
    - **Git tag:** Run `date +"%Y%m%d.%H%M"` to produce the tag version (e.g. `20260214.1230`). The git tag is `v` prefixed: `v20260214.1230`.
-   - **Manifest version:** Run `date +"%Y.%m%d.%H%M"` to produce the manifest version (e.g. `2026.0214.1230`). Chrome requires 1-4 dot-separated integers each 0-65535, so the date must be split.
+   - **Manifest version:** Run `echo "$(date +%Y).$((10#$(date +%m%d))).$((10#$(date +%H%M)))"` to produce the manifest version (e.g. `2026.214.1230`, or `2026.1102.956` at 09:56). Chrome requires 1-4 dot-separated integers each 0-65535, and a part may not start with a leading zero, so the date is split and each part is written as a plain number.
 
 ## Pre-flight checks
 
