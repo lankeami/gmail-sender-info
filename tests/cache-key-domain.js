@@ -4,7 +4,7 @@
  * fetch, so the shipped code is exercised. Verifies the cache is keyed by
  * sender domain (not full email), keeps the 24h TTL, and that the install /
  * update handler clears old entries (including legacy email-keyed ones) while
- * preserving the review-nag keys.
+ * preserving the review-prompt keys (and migrating an old snooze to dismiss count 1).
  * Run: node tests/cache-key-domain.js
  */
 
@@ -129,12 +129,39 @@ function makeSandbox() {
     sb.store.gsi_email_view_count = 7;
     sb.store.gsi_review_snoozed_at = 456;
     sb.store.gsi_review_clicked_at = 789;
+    sb.store.gsi_warned_at = 111;
+    sb.store.gsi_review_dismiss_count = 2;
     await sb.getOnInstalled()({ reason: 'update' });
     check('legacy email-keyed entry removed', !('alice@example.com' in sb.store));
     check('domain-keyed entry removed', !('gsi_cache:example.com' in sb.store));
-    check('review-nag keys preserved', sb.store.gsi_first_use_time === 123 && sb.store.gsi_email_view_count === 7
-      && sb.store.gsi_review_snoozed_at === 456 && sb.store.gsi_review_clicked_at === 789);
-    check('only the four review keys remain', Object.keys(sb.store).length === 4);
+    check('review-prompt keys preserved', sb.store.gsi_first_use_time === 123 && sb.store.gsi_email_view_count === 7
+      && sb.store.gsi_review_snoozed_at === 456 && sb.store.gsi_review_clicked_at === 789
+      && sb.store.gsi_warned_at === 111 && sb.store.gsi_review_dismiss_count === 2);
+    check('existing dismiss count is not rewritten', sb.store.gsi_review_dismiss_count === 2);
+    check('only the six review keys remain', Object.keys(sb.store).length === 6);
+  }
+
+  console.log('old snooze migrates to dismiss count 1');
+  {
+    const sb = makeSandbox();
+    sb.store['gsi_cache:example.com'] = { data: {}, ts: Date.now() };
+    sb.store.gsi_first_use_time = 50;
+    sb.store.gsi_review_snoozed_at = 60;
+    await sb.getOnInstalled()({ reason: 'update' });
+    check('dismiss count backfilled to 1', sb.store.gsi_review_dismiss_count === 1);
+    check('old snooze timestamp kept', sb.store.gsi_review_snoozed_at === 60);
+    check('first-use time kept', sb.store.gsi_first_use_time === 50);
+    check('cache entry still removed', !('gsi_cache:example.com' in sb.store));
+  }
+
+  console.log('explicit dismiss count 0 is not rewritten');
+  {
+    const sb = makeSandbox();
+    sb.store.gsi_review_snoozed_at = 60;
+    sb.store.gsi_review_dismiss_count = 0;
+    await sb.getOnInstalled()({ reason: 'update' });
+    check('dismiss count 0 stays 0', sb.store.gsi_review_dismiss_count === 0);
+    check('snooze timestamp kept beside a zero count', sb.store.gsi_review_snoozed_at === 60);
   }
 
   console.log(`\n${passed} passed, ${failed} failed`);

@@ -646,11 +646,18 @@
    * @param {Object} bannerState - shared state for logo/auth coordination
    */
   function createSecuritySection(pills, geminiIcon, info, envelopeEmail, bannerState) {
+    const finish = (verdictKey) => {
+      if (bannerState) bannerState.authVerdict = verdictKey;
+      updateVerdictPill(pills.verdict, verdictKey);
+      updateGeminiColor(geminiIcon, verdictKey);
+      if (verdictKey === 'caution' || verdictKey === 'dangerous') noteReviewWarning();
+      if (bannerState && typeof bannerState.onVerdict === 'function') bannerState.onVerdict();
+    };
+
     (async () => {
       const msgResult = getMessageId();
       if (!msgResult) {
-        updateVerdictPill(pills.verdict, 'caution');
-        updateGeminiColor(geminiIcon, 'caution');
+        finish('caution');
         return;
       }
 
@@ -659,8 +666,7 @@
       if (!authResults) {
         const result = await fetchEmailHeaders(messageId);
         if (result.error) {
-          updateVerdictPill(pills.verdict, 'caution');
-          updateGeminiColor(geminiIcon, 'caution');
+          finish('caution');
           return;
         }
         authResults = result.authData || parseAuthResults(result.headers);
@@ -668,8 +674,7 @@
       }
 
       if (!authResults) {
-        updateVerdictPill(pills.verdict, 'caution');
-        updateGeminiColor(geminiIcon, 'caution');
+        finish('caution');
         return;
       }
 
@@ -698,11 +703,8 @@
       if (info.homograph?.isHomograph) {
         verdictKey = 'dangerous';
       }
-      if (bannerState) bannerState.authVerdict = verdictKey;
 
-      // Update strip verdict pill and gemini icon
-      updateVerdictPill(pills.verdict, verdictKey);
-      updateGeminiColor(geminiIcon, verdictKey);
+      finish(verdictKey);
     })();
   }
 
@@ -1129,18 +1131,235 @@
     return { url: null, debug };
   }
 
+  // --- Review prompt ---
+  // One calm ask per Gmail tab, only after the extension has been useful and
+  // the open email's final auth verdict is trusted. No analytics.
+
+  const REVIEW_STORE_URL = 'https://chromewebstore.google.com/detail/aogdnanhellgfimhgebopmcpaagoeckk/reviews';
+  const REVIEW_SUPPORT_URL = 'https://lankeami.github.io/gmail-sender-info/support.html';
+  const REVIEW_PROMPT_STORAGE_KEYS = [
+    'gsi_first_use_time',
+    'gsi_email_view_count',
+    'gsi_warned_at',
+    'gsi_review_snoozed_at',
+    'gsi_review_clicked_at',
+    'gsi_review_dismiss_count',
+  ];
+
+  let reviewPromptShownThisTab = false;
+  let reviewPromptTicket = 0;
+  let reviewWarningNoted = false;
+  // Resolves after the open-email counter write so the prompt reads the new total.
+  let emailViewCountReady = Promise.resolve();
+
+  function recordEmailView() {
+    emailViewCountReady = new Promise((resolve) => {
+      try {
+        chrome.storage.local.get('gsi_email_view_count', (result) => {
+          if (chrome.runtime.lastError) { resolve(); return; }
+          const next = (result.gsi_email_view_count || 0) + 1;
+          try {
+            chrome.storage.local.set({ gsi_email_view_count: next }, () => resolve());
+          } catch { resolve(); }
+        });
+      } catch { resolve(); }
+    });
+  }
+
+  /**
+   * Dismissals already used. A snooze written before gsi_review_dismiss_count
+   * existed counts as one dismissal.
+   */
+  function effectiveReviewDismissCount(state) {
+    if (!state) return 0;
+    const raw = state.gsi_review_dismiss_count;
+    if (typeof raw === 'number' && Number.isFinite(raw)) return raw;
+    if (state.gsi_review_snoozed_at != null) return 1;
+    return 0;
+  }
+
+  /**
+   * Whether the review prompt may render.
+   * @param {object} state storage fields plus shownThisTab (in-memory, this tab)
+   * @param {number} now epoch ms
+   * @param {{auth: string|null, ai: string|null}} verdicts auth is trusted/caution/dangerous; ai is Ok/Caution/Reject or null when none arrived
+   */
+  function shouldShowReviewPrompt(state, now, verdicts) {
+    const DAY = 86400000;
+    if (!state || !verdicts) return false;
+    if (verdicts.auth !== 'trusted') return false;
+    if (verdicts.ai === 'Caution' || verdicts.ai === 'Reject') return false;
+    if (state.shownThisTab) return false;
+    if (state.gsi_review_clicked_at != null && state.gsi_review_clicked_at !== '') return false;
+    if (effectiveReviewDismissCount(state) >= 2) return false;
+
+    const snoozedAt = Number(state.gsi_review_snoozed_at);
+    if (Number.isFinite(snoozedAt) && (now - snoozedAt) < 30 * DAY) return false;
+
+    const firstUse = Number(state.gsi_first_use_time);
+    if (!Number.isFinite(firstUse) || (now - firstUse) < 7 * DAY) return false;
+    const views = Number(state.gsi_email_view_count);
+    if (!Number.isFinite(views) || views < 20) return false;
+
+    const warned = state.gsi_warned_at != null && state.gsi_warned_at !== '';
+    if (!warned && (now - firstUse) < 30 * DAY) return false;
+    return true;
+  }
+
+  function storageLocalGet(keys) {
+    return new Promise((resolve, reject) => {
+      try {
+        chrome.storage.local.get(keys, (result) => {
+          if (chrome.runtime.lastError) reject(new Error(chrome.runtime.lastError.message));
+          else resolve(result || {});
+        });
+      } catch (err) {
+        reject(err);
+      }
+    });
+  }
+
+  function noteReviewWarning() {
+    if (reviewWarningNoted || !contextValid) return;
+    reviewWarningNoted = true;
+    try {
+      chrome.storage.local.get('gsi_warned_at', (result) => {
+        if (chrome.runtime.lastError) {
+          reviewWarningNoted = false;
+          return;
+        }
+        if (result && result.gsi_warned_at != null && result.gsi_warned_at !== '') return;
+        chrome.storage.local.set({ gsi_warned_at: Date.now() }, () => {
+          if (chrome.runtime.lastError) reviewWarningNoted = false;
+        });
+      });
+    } catch {
+      reviewWarningNoted = false;
+    }
+  }
+
+  function dismissReviewPrompt() {
+    try {
+      chrome.storage.local.get(['gsi_review_dismiss_count', 'gsi_review_snoozed_at'], (result) => {
+        if (chrome.runtime.lastError) return;
+        const next = effectiveReviewDismissCount(result || {}) + 1;
+        chrome.storage.local.set({
+          gsi_review_dismiss_count: next,
+          gsi_review_snoozed_at: Date.now(),
+        });
+      });
+    } catch { /* context invalidated */ }
+  }
+
+  function renderReviewPrompt(banner, rs) {
+    const count = Number(rs.gsi_email_view_count) || 0;
+    const row = document.createElement('div');
+    row.classList.add('gsi-review-prompt');
+    row.setAttribute('role', 'region');
+    row.setAttribute('aria-label', 'Rate Gmail Sender Info');
+
+    const copy = document.createElement('p');
+    copy.classList.add('gsi-review-prompt-copy');
+    const lead = document.createElement('strong');
+    lead.textContent = 'Gmail Sender Info has checked ' + count.toLocaleString() + ' emails for you.';
+    copy.appendChild(lead);
+    copy.appendChild(document.createElement('br'));
+    copy.appendChild(document.createTextNode("If it's helped, a quick rating helps other people find it."));
+    row.appendChild(copy);
+
+    const actions = document.createElement('div');
+    actions.classList.add('gsi-review-prompt-actions');
+
+    const rate = document.createElement('button');
+    rate.type = 'button';
+    rate.classList.add('gsi-review-prompt-btn', 'gsi-review-prompt-primary');
+    rate.textContent = 'Rate it';
+    rate.setAttribute('aria-label', 'Rate Gmail Sender Info on the Chrome Web Store');
+    rate.addEventListener('click', () => {
+      // window.open(url, '_blank', 'noopener') returns null, so a real anchor
+      // carries rel=noopener and still opens from this click.
+      const link = document.createElement('a');
+      link.href = REVIEW_STORE_URL;
+      link.target = '_blank';
+      link.rel = 'noopener';
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      try {
+        chrome.storage.local.set({ gsi_review_clicked_at: Date.now() });
+      } catch { /* context invalidated */ }
+      row.remove();
+    });
+
+    const later = document.createElement('button');
+    later.type = 'button';
+    later.classList.add('gsi-review-prompt-btn', 'gsi-review-prompt-secondary');
+    later.textContent = 'Not now';
+    later.setAttribute('aria-label', 'Not now');
+    later.addEventListener('click', () => {
+      dismissReviewPrompt();
+      row.remove();
+    });
+
+    const report = document.createElement('a');
+    report.classList.add('gsi-review-prompt-report');
+    report.href = REVIEW_SUPPORT_URL;
+    report.target = '_blank';
+    report.rel = 'noopener';
+    report.textContent = 'Report a problem';
+    report.setAttribute('aria-label', 'Report a problem');
+    report.addEventListener('click', () => {
+      dismissReviewPrompt();
+      // Let the browser follow the link before the row leaves the document.
+      setTimeout(() => { if (row.isConnected) row.remove(); }, 0);
+    });
+
+    actions.appendChild(rate);
+    actions.appendChild(later);
+    actions.appendChild(report);
+    row.appendChild(actions);
+
+    const details = banner.querySelector('.gsi-details-panel');
+    if (details) banner.insertBefore(row, details);
+    else banner.appendChild(row);
+  }
+
+  function syncReviewPrompt(banner, bannerState) {
+    if (!banner || !banner.isConnected) return;
+    const auth = bannerState.authVerdict;
+    const ai = bannerState.aiVerdict;
+    if (auth === 'caution' || auth === 'dangerous' || ai === 'Caution' || ai === 'Reject') {
+      const existing = banner.querySelector('.gsi-review-prompt');
+      if (existing) existing.remove();
+      reviewPromptTicket++;
+      return;
+    }
+    if (auth !== 'trusted' || reviewPromptShownThisTab) return;
+    if (banner.querySelector('.gsi-review-prompt')) return;
+
+    const ticket = ++reviewPromptTicket;
+    emailViewCountReady.then(() => storageLocalGet(REVIEW_PROMPT_STORAGE_KEYS)).then((rs) => {
+      if (ticket !== reviewPromptTicket) return;
+      if (!banner.isConnected || reviewPromptShownThisTab) return;
+      if (bannerState.authVerdict !== 'trusted') return;
+      if (bannerState.aiVerdict === 'Caution' || bannerState.aiVerdict === 'Reject') return;
+      const state = Object.assign({}, rs, { shownThisTab: reviewPromptShownThisTab });
+      if (!shouldShowReviewPrompt(state, Date.now(), {
+        auth: bannerState.authVerdict,
+        ai: bannerState.aiVerdict,
+      })) return;
+      renderReviewPrompt(banner, rs);
+      reviewPromptShownThisTab = true;
+    }).catch(() => { /* storage unavailable */ });
+  }
+
   function insertBanner(info, envelopeEmail) {
     removeBanner();
 
     const subjectEl = document.querySelector('.hP');
     if (!subjectEl) return;
 
-    try {
-      chrome.storage.local.get('gsi_email_view_count', (r) => {
-        if (chrome.runtime.lastError) return;
-        chrome.storage.local.set({ gsi_email_view_count: (r.gsi_email_view_count || 0) + 1 });
-      });
-    } catch { /* context invalidated */ }
+    recordEmailView();
 
     const banner = document.createElement('div');
     banner.id = 'gsi-banner';
@@ -1149,8 +1368,11 @@
     const stripRow = document.createElement('div');
     stripRow.classList.add('gsi-strip-row');
 
-    // Shared state for async logo/security coordination (unchanged logic)
-    const bannerState = { resolvedLogoSource: null, authVerdict: null };
+    // Shared state for async logo/security/review coordination.
+    // authVerdict stays null until the final verdict (trusted/caution/dangerous).
+    // aiVerdict stays null until Gemini Nano returns Ok, Caution, or Reject.
+    const bannerState = { resolvedLogoSource: null, authVerdict: null, aiVerdict: null };
+    bannerState.onVerdict = () => syncReviewPrompt(banner, bannerState);
 
     // Logo source text element (in details panel, created later but referenced in callback)
     let srcTextEl = null;
@@ -1162,8 +1384,11 @@
         srcTextEl.textContent = SOURCE_DETAIL_LABELS[sourceKey] || sourceKey;
       }
       if (sourceKey === SOURCE_UNKNOWN && bannerState.authVerdict === 'trusted') {
+        bannerState.authVerdict = 'caution';
         updateVerdictPill(verdictPill, 'caution');
         updateGeminiColor(geminiIcon, 'caution');
+        noteReviewWarning();
+        if (typeof bannerState.onVerdict === 'function') bannerState.onVerdict();
       }
     });
     stripRow.appendChild(logo);
@@ -1411,62 +1636,14 @@
 
     // 4. Debug section (nested collapsible) — built by original sender / debug async block
 
-    // --- Review nag (below AI line, above details) ---
-    const reviewNagRow = document.createElement('div');
-    reviewNagRow.classList.add('gsi-review-nag');
-    reviewNagRow.style.display = 'none';
-    banner.appendChild(reviewNagRow);
-
-    (async () => {
-      if (!contextValid) return;
-      try {
-        const rs = await new Promise(resolve => {
-          chrome.storage.local.get(
-            ['gsi_first_use_time', 'gsi_email_view_count', 'gsi_review_snoozed_at', 'gsi_review_clicked_at'],
-            resolve
-          );
-        });
-        if (rs.gsi_review_clicked_at) return;
-        if (rs.gsi_review_snoozed_at && (Date.now() - rs.gsi_review_snoozed_at) < 14 * 86400000) return;
-        if (!rs.gsi_first_use_time || (Date.now() - rs.gsi_first_use_time) < 7 * 86400000) return;
-        if ((rs.gsi_email_view_count || 0) < 10) return;
-        if (!banner.isConnected) return;
-
-        const text = document.createElement('span');
-        text.textContent = 'Have we helped keep you safe? Help others find us by ';
-        const link = document.createElement('a');
-        link.href = 'https://chromewebstore.google.com/detail/gmail-sender-info/aogdnanhellgfimhgebopmcpaagoeckk/reviews';
-        link.target = '_blank';
-        link.rel = 'noopener';
-        link.classList.add('gsi-review-nag-link');
-        link.textContent = 'leaving a review';
-        link.addEventListener('click', () => {
-          chrome.storage.local.set({ gsi_review_clicked_at: Date.now() });
-          reviewNagRow.remove();
-        });
-        const spacer = document.createElement('div');
-        spacer.style.flex = '1';
-        const dismiss = document.createElement('button');
-        dismiss.classList.add('gsi-review-nag-dismiss');
-        dismiss.type = 'button';
-        dismiss.title = 'Dismiss';
-        dismiss.setAttribute('aria-label', 'Dismiss review prompt');
-        dismiss.textContent = '✕';
-        dismiss.addEventListener('click', () => {
-          chrome.storage.local.set({ gsi_review_snoozed_at: Date.now() });
-          reviewNagRow.remove();
-        });
-        reviewNagRow.appendChild(text);
-        reviewNagRow.appendChild(link);
-        reviewNagRow.appendChild(spacer);
-        reviewNagRow.appendChild(dismiss);
-        reviewNagRow.style.display = '';
-      } catch { /* storage access failed */ }
-    })();
-
     banner.appendChild(detailsPanel);
 
-    // Wire up security section to update pills
+    // Insert before the subject line, but match the width of the email
+    // body table below (.ii .a3s = message body, or the parent .gs container).
+    // Security runs after insertion so a cached verdict can attach the review
+    // prompt to a connected banner.
+    subjectEl.parentElement.insertBefore(banner, subjectEl);
+
     createSecuritySection(
       { spf: spfPill, dkim: dkimPill, dmarc: dmarcPill, verdict: verdictPill },
       geminiIcon,
@@ -1474,10 +1651,6 @@
       envelopeEmail,
       bannerState
     );
-
-    // Insert before the subject line, but match the width of the email
-    // body table below (.ii .a3s = message body, or the parent .gs container).
-    subjectEl.parentElement.insertBefore(banner, subjectEl);
 
     // Size to the email body area rather than the narrow subject wrapper
     function matchBodyWidth() {
@@ -1658,10 +1831,12 @@
       }
 
       function applyAiResult(result) {
+        const failed = !result || result.timeout || result.parseError;
+        // A failed run is not a verdict. Keep Caution/Reject from an earlier pass.
+        if (!failed && result.verdict) bannerState.aiVerdict = result.verdict;
+
         // Reset gemini icon classes
         geminiIcon.classList.remove('gsi-gemini-ok', 'gsi-gemini-caution', 'gsi-gemini-reject', 'gsi-gemini-neutral');
-
-        const failed = !result || result.timeout || result.parseError;
 
         if (failed) {
           geminiIcon.classList.add('gsi-gemini-neutral');
@@ -1761,6 +1936,7 @@
         if (result && result.debug) {
           appendAiDebugLines(banner, result);
         }
+        if (typeof bannerState.onVerdict === 'function') bannerState.onVerdict();
       }
 
       const result = await requestAiAnalysis(emailData);

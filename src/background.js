@@ -394,9 +394,21 @@ async function setCache(domain, data) {
 // --- Clear stale cache on install/update ---
 
 chrome.runtime.onInstalled.addListener(async () => {
-  const reviewKeys = ['gsi_first_use_time', 'gsi_email_view_count', 'gsi_review_snoozed_at', 'gsi_review_clicked_at'];
+  const reviewKeys = [
+    'gsi_first_use_time',
+    'gsi_email_view_count',
+    'gsi_review_snoozed_at',
+    'gsi_review_clicked_at',
+    'gsi_warned_at',
+    'gsi_review_dismiss_count',
+  ];
   const saved = await chrome.storage.local.get(reviewKeys);
   await chrome.storage.local.clear();
+  // Builds before the dismiss counter snoozed with gsi_review_snoozed_at only.
+  // That snooze is one dismissal, so the next Not now is the last.
+  if (saved.gsi_review_snoozed_at != null && saved.gsi_review_dismiss_count == null) {
+    saved.gsi_review_dismiss_count = 1;
+  }
   if (Object.keys(saved).length > 0) {
     await chrome.storage.local.set(saved);
   }

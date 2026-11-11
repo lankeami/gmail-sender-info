@@ -417,46 +417,95 @@
   object-fit: contain;
 }
 
-/* --- Review nag row --- */
+/* --- Review prompt (trusted emails only) --- */
 
-.gsi-review-nag {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 14px;
+#gsi-banner .gsi-review-prompt {
+  padding: 12px 14px;
   border-top: 1px solid #ebebeb;
-  font-size: 12px;
-  color: #5f6368;
+  background: #f4f8fe;
 }
 
-.gsi-review-nag-link {
-  color: #1a73e8;
-  text-decoration: none;
+#gsi-banner .gsi-review-prompt-copy {
+  margin: 0 0 10px;
+  font-size: 13px;
+  line-height: 1.4;
+  color: #1a1a1a;
+}
+
+#gsi-banner .gsi-review-prompt-copy strong {
+  font-weight: 700;
+}
+
+#gsi-banner .gsi-review-prompt-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+#gsi-banner .gsi-review-prompt-btn {
+  appearance: none;
+  -webkit-appearance: none;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  border-radius: 16px;
+  font-family: inherit;
+  font-size: 13px;
   font-weight: 500;
+  line-height: 18px;
+  cursor: pointer;
+  text-decoration: none;
+  user-select: none;
 }
 
-.gsi-review-nag-link:hover {
+#gsi-banner .gsi-review-prompt-primary,
+#gsi-banner .gsi-review-prompt-primary:visited {
+  background: #1a73e8;
+  color: #fff;
+  border: none;
+  padding: 6px 14px;
+}
+
+#gsi-banner .gsi-review-prompt-primary:hover {
+  background: #1765cc;
+  color: #fff;
+}
+
+#gsi-banner .gsi-review-prompt-secondary {
+  background: #fff;
+  color: #1a73e8;
+  border: 1px solid #dadce0;
+  padding: 5px 13px;
+}
+
+#gsi-banner .gsi-review-prompt-secondary:hover {
+  background: #e8f0fe;
+}
+
+#gsi-banner .gsi-review-prompt-report {
+  margin-left: auto;
+  font-family: inherit;
+  font-size: 12px;
+  line-height: 18px;
+  color: #5f6368;
   text-decoration: underline;
-}
-
-.gsi-review-nag-dismiss {
-  padding: 0;
-  width: 20px;
-  height: 20px;
-  font-size: 14px;
-  line-height: 20px;
-  text-align: center;
-  color: #9aa0a6;
   background: none;
   border: none;
-  border-radius: 50%;
+  padding: 0;
   cursor: pointer;
-  flex-shrink: 0;
 }
 
-.gsi-review-nag-dismiss:hover {
-  background: #e8eaed;
+#gsi-banner .gsi-review-prompt-report:hover {
   color: #3c4043;
+}
+
+#gsi-banner .gsi-review-prompt-btn:focus-visible,
+#gsi-banner .gsi-review-prompt-report:focus-visible {
+  outline: 2px solid #1a73e8;
+  outline-offset: 2px;
 }
 
 /* --- Stale context nudge (extension updated mid-session) --- */
@@ -466,7 +515,8 @@
   pointer-events: none;
 }
 
-.gsi-stale .gsi-ai-line {
+.gsi-stale .gsi-ai-line,
+.gsi-stale .gsi-review-prompt {
   display: none;
 }
 
