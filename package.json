@@ -1,0 +1,8 @@
+{
+  "name": "gmail-sender-info",
+  "private": true,
+  "description": "Test runner dependencies for Gmail Sender Info. The extension itself has no build step.",
+  "devDependencies": {
+    "jsdom": "^25.0.1"
+  }
+}

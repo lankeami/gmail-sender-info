@@ -1215,32 +1215,42 @@
   }
 
   /**
+   * Why the prompt must not render, or null when it may.
+   * Same decision as shouldShowReviewPrompt.
+   */
+  function reviewPromptSkipReason(state, now, verdicts) {
+    const DAY = 86400000;
+    if (!state || !verdicts) return 'missing-state';
+    if (verdicts.auth === 'caution' || verdicts.auth === 'dangerous') return 'warning';
+    if (verdicts.auth !== 'trusted') return 'auth-pending';
+    if (verdicts.aiDone !== true) return 'ai-pending';
+    if (verdicts.ai === 'Caution' || verdicts.ai === 'Reject') return 'warning';
+    if (state.shownThisTab) return 'shown-this-tab';
+    if (state.gsi_review_clicked_at != null && state.gsi_review_clicked_at !== '') return 'clicked';
+    if (effectiveReviewDismissCount(state) >= 2) return 'dismissed';
+    const snoozedAt = Number(state.gsi_review_snoozed_at);
+    if (Number.isFinite(snoozedAt) && (now - snoozedAt) < 30 * DAY) return 'snoozed';
+    const firstUse = Number(state.gsi_first_use_time);
+    if (!Number.isFinite(firstUse) || (now - firstUse) < 7 * DAY) return 'under-7-days';
+    const views = Number(state.gsi_email_view_count);
+    if (!Number.isFinite(views) || views < 20) return 'under-20-emails';
+    const warned = state.gsi_warned_at != null && state.gsi_warned_at !== '';
+    if (!warned && (now - firstUse) < 30 * DAY) return 'no-warning-yet';
+    return null;
+  }
+
+  function logReviewSkip(reason) {
+    console.debug('[GSI review] ' + reason);
+  }
+
+  /**
    * Whether the review prompt may render.
    * @param {object} state storage fields plus shownThisTab (in-memory, this tab)
    * @param {number} now epoch ms
    * @param {{auth: string|null, ai: string|null, aiDone: boolean}} verdicts auth is trusted/caution/dangerous; ai is Ok/Caution/Reject or null; aiDone is false while analysis is still in flight
    */
   function shouldShowReviewPrompt(state, now, verdicts) {
-    const DAY = 86400000;
-    if (!state || !verdicts) return false;
-    if (verdicts.auth !== 'trusted') return false;
-    if (verdicts.aiDone !== true) return false;
-    if (verdicts.ai === 'Caution' || verdicts.ai === 'Reject') return false;
-    if (state.shownThisTab) return false;
-    if (state.gsi_review_clicked_at != null && state.gsi_review_clicked_at !== '') return false;
-    if (effectiveReviewDismissCount(state) >= 2) return false;
-
-    const snoozedAt = Number(state.gsi_review_snoozed_at);
-    if (Number.isFinite(snoozedAt) && (now - snoozedAt) < 30 * DAY) return false;
-
-    const firstUse = Number(state.gsi_first_use_time);
-    if (!Number.isFinite(firstUse) || (now - firstUse) < 7 * DAY) return false;
-    const views = Number(state.gsi_email_view_count);
-    if (!Number.isFinite(views) || views < 20) return false;
-
-    const warned = state.gsi_warned_at != null && state.gsi_warned_at !== '';
-    if (!warned && (now - firstUse) < 30 * DAY) return false;
-    return true;
+    return reviewPromptSkipReason(state, now, verdicts) == null;
   }
 
   function storageLocalGet(keys) {
@@ -1362,9 +1372,14 @@
 
   function syncReviewPrompt(banner, bannerState) {
     if (!banner || !banner.isConnected) return;
+    const verdicts = {
+      auth: bannerState.authVerdict,
+      ai: bannerState.aiVerdict,
+      aiDone: bannerState.aiDone,
+    };
     const effect = reviewPromptWarningEffect(
       { shownThisTab: reviewPromptShownThisTab },
-      { auth: bannerState.authVerdict, ai: bannerState.aiVerdict }
+      verdicts
     );
     if (effect.removeRow) {
       const existing = banner.querySelector('.gsi-review-prompt');
@@ -1373,32 +1388,47 @@
       // email in this tab can still ask. No storage write.
       reviewPromptShownThisTab = effect.shownThisTab;
       reviewPromptTicket++;
+      logReviewSkip('warning');
       return;
     }
-    if (bannerState.authVerdict !== 'trusted' || bannerState.aiDone !== true || reviewPromptShownThisTab) return;
     if (banner.querySelector('.gsi-review-prompt')) return;
+    const early = reviewPromptSkipReason(
+      { shownThisTab: reviewPromptShownThisTab, gsi_first_use_time: 1, gsi_email_view_count: 20, gsi_warned_at: 1 },
+      Date.now(),
+      verdicts
+    );
+    // Verdict and per-tab reasons are known now. Storage reasons wait for the read.
+    if (early === 'warning' || early === 'auth-pending' || early === 'ai-pending' || early === 'shown-this-tab') {
+      logReviewSkip(early);
+      return;
+    }
 
     const ticket = ++reviewPromptTicket;
     emailViewCountReady.then(() => storageLocalGet(REVIEW_PROMPT_STORAGE_KEYS)).then((rs) => {
       if (ticket !== reviewPromptTicket) return;
-      if (!banner.isConnected || reviewPromptShownThisTab) return;
+      if (!banner.isConnected) return;
       const again = reviewPromptWarningEffect(
         { shownThisTab: reviewPromptShownThisTab },
-        { auth: bannerState.authVerdict, ai: bannerState.aiVerdict }
+        { auth: bannerState.authVerdict, ai: bannerState.aiVerdict, aiDone: bannerState.aiDone }
       );
       if (again.removeRow) {
         const existing = banner.querySelector('.gsi-review-prompt');
         if (existing) existing.remove();
         reviewPromptShownThisTab = again.shownThisTab;
+        logReviewSkip('warning');
         return;
       }
-      if (bannerState.authVerdict !== 'trusted' || bannerState.aiDone !== true) return;
+      if (banner.querySelector('.gsi-review-prompt')) return;
       const state = Object.assign({}, rs, { shownThisTab: reviewPromptShownThisTab });
-      if (!shouldShowReviewPrompt(state, Date.now(), {
+      const reason = reviewPromptSkipReason(state, Date.now(), {
         auth: bannerState.authVerdict,
         ai: bannerState.aiVerdict,
         aiDone: bannerState.aiDone,
-      })) return;
+      });
+      if (reason) {
+        logReviewSkip(reason);
+        return;
+      }
       renderReviewPrompt(banner, rs);
       reviewPromptShownThisTab = true;
     }).catch(() => { /* storage unavailable */ });

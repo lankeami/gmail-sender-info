@@ -29,15 +29,17 @@ const contentPath = path.join(srcDir, 'content.js');
 const loaded = eval(
   '(function(){\n' +
   extractFunction(contentPath, 'effectiveReviewDismissCount') + '\n' +
+  extractFunction(contentPath, 'reviewPromptSkipReason') + '\n' +
   extractFunction(contentPath, 'reviewAiResultSettlement') + '\n' +
   extractFunction(contentPath, 'reviewAiAvailabilitySettlement') + '\n' +
   extractFunction(contentPath, 'reviewPromptWarningEffect') + '\n' +
   extractFunction(contentPath, 'shouldShowReviewPrompt') + '\n' +
-  'return { effectiveReviewDismissCount, reviewAiResultSettlement, reviewAiAvailabilitySettlement, reviewPromptWarningEffect, shouldShowReviewPrompt };\n' +
+  'return { effectiveReviewDismissCount, reviewPromptSkipReason, reviewAiResultSettlement, reviewAiAvailabilitySettlement, reviewPromptWarningEffect, shouldShowReviewPrompt };\n' +
   '})()'
 );
 const {
   effectiveReviewDismissCount,
+  reviewPromptSkipReason,
   reviewAiResultSettlement,
   reviewAiAvailabilitySettlement,
   reviewPromptWarningEffect,
@@ -260,6 +262,7 @@ console.log('shipped copy');
   check('sync uses the warning effect', content.includes('reviewPromptWarningEffect('));
   check('AI result uses settlement', content.includes('reviewAiResultSettlement('));
   check('unavailable AI uses settlement', content.includes('reviewAiAvailabilitySettlement('));
+  check('one review debug line', (content.match(/console\.debug\('\[GSI review\] '/g) || []).length === 1);
   check('manifest description is the approved summary', manifest.description === summary);
   check('manifest description is 129 characters', manifest.description.length === 129);
 }
