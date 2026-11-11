@@ -139,21 +139,31 @@ Always visible below the main strip (not inside the expandable details). Uses Ch
 5. Empty body detection (suspicious from unknown senders)
 6. Reply-To domain mismatch (replies routed to different domain than sender)
 
-#### 2b. Review Nag (`.gsi-review-nag`)
+#### 2b. Review Prompt (`.gsi-review-prompt`)
 
-Conditionally visible below the AI line, above the details panel. Prompts engaged users to leave a Chrome Web Store review.
+Conditionally visible below the AI line, above the details panel. One calm ask per Gmail tab for a Chrome Web Store rating. Same controls for everyone: no star picker, no rewards, no modal, no toolbar badge. Eligibility is `shouldShowReviewPrompt(state, now, verdicts)` in `content.js`.
+
+**Classes:** `.gsi-review-prompt` (full-width flex row, light blue `#f4f8fe`, padding `8px 14px`, `gap: 8px 12px`, wraps), `.gsi-review-prompt-copy` (`flex: 1`, shrinks), `.gsi-review-prompt-actions` (Rate it, Not now, Report a problem; sits on the right and wraps below the copy on a narrow banner), `.gsi-review-prompt-btn`, `.gsi-review-prompt-primary` (Gmail blue `#1a73e8` pill), `.gsi-review-prompt-secondary` (outlined pill), `.gsi-review-prompt-report` (text link).
 
 **Show conditions (all must be true):**
-- No `gsi_review_clicked_at` in storage (permanent dismiss)
-- No `gsi_review_snoozed_at` within last 14 days
-- `gsi_first_use_time` is 7+ days ago (set on first successful sender info lookup)
-- `gsi_email_view_count` >= 10 (incremented on each banner insert)
+- Final auth verdict for this email is `trusted` (not `caution` / `dangerous`, and not while the pill still says Checking)
+- On-device AI is finished (`aiDone`): a result of `Ok`, a failed run, or AI unavailable/disabled. Not while analysis or a model download is still in progress. `Caution` or `Reject` blocks the row
+- No `gsi_review_clicked_at` (already rated — never again)
+- `gsi_review_dismiss_count` < 2 (a pre-counter `gsi_review_snoozed_at` counts as 1)
+- No `gsi_review_snoozed_at` within the last 30 days
+- Not already shown on a final Trusted email during this Gmail tab load. A warning removes the row if it is visible and does not change that flag, and it does not write snooze or dismiss storage. If this tab has not shown the prompt yet, a warning leaves it unshown
+- `gsi_first_use_time` is 7+ days ago
+- `gsi_email_view_count` >= 20
+- `gsi_warned_at` is set, or first use was 30+ days ago
+
+If the auth verdict later drops to caution or dangerous (including the unknown-logo cap), or AI returns Caution/Reject, the row is removed and the in-tab flag stays as it was. The first time any email resolves to caution or dangerous, `gsi_warned_at` is set once. Copy lead is "Checked {count} emails for you."
 
 **User actions:**
-- Click review link → sets `gsi_review_clicked_at`, nag never returns
-- Click X (dismiss) → sets `gsi_review_snoozed_at`, nag returns after 14 days
+- Rate it → new tab to the store reviews page (`noopener`), sets `gsi_review_clicked_at`, never asks again
+- Not now → increments `gsi_review_dismiss_count`, sets `gsi_review_snoozed_at` (30 days; the second dismissal is permanent)
+- Report a problem → new tab to `support.html` (`noopener`) and counts as Not now
 
-**Storage keys** (`gsi_first_use_time`, `gsi_email_view_count`, `gsi_review_snoozed_at`, `gsi_review_clicked_at`) are preserved across `chrome.storage.local.clear()` in the `onInstalled` handler.
+**Storage keys** (`gsi_first_use_time`, `gsi_email_view_count`, `gsi_review_snoozed_at`, `gsi_review_clicked_at`, `gsi_warned_at`, `gsi_review_dismiss_count`) are preserved across `chrome.storage.local.clear()` in the `onInstalled` handler. An old snooze with no dismiss count is rewritten to dismiss count 1 on update.
 
 #### 3. Details Panel (`.gsi-details-panel`)
 

@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Gmail Sender Info",
   "version": "2026.1102.956",
-  "description": "Shows sender domain info, logo, and favicon on Gmail inbox rows and email view.",
+  "description": "Spot phishing in Gmail. See who really sent each email: verified logo, domain, and a Trusted, Use Caution or Not Trusted verdict.",
   "permissions": ["storage"],
   "host_permissions": [
     "https://dns.google/*",
