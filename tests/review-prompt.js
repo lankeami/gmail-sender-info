@@ -29,11 +29,20 @@ const contentPath = path.join(srcDir, 'content.js');
 const loaded = eval(
   '(function(){\n' +
   extractFunction(contentPath, 'effectiveReviewDismissCount') + '\n' +
+  extractFunction(contentPath, 'reviewAiResultSettlement') + '\n' +
+  extractFunction(contentPath, 'reviewAiAvailabilitySettlement') + '\n' +
+  extractFunction(contentPath, 'reviewPromptWarningEffect') + '\n' +
   extractFunction(contentPath, 'shouldShowReviewPrompt') + '\n' +
-  'return { effectiveReviewDismissCount, shouldShowReviewPrompt };\n' +
+  'return { effectiveReviewDismissCount, reviewAiResultSettlement, reviewAiAvailabilitySettlement, reviewPromptWarningEffect, shouldShowReviewPrompt };\n' +
   '})()'
 );
-const { effectiveReviewDismissCount, shouldShowReviewPrompt } = loaded;
+const {
+  effectiveReviewDismissCount,
+  reviewAiResultSettlement,
+  reviewAiAvailabilitySettlement,
+  reviewPromptWarningEffect,
+  shouldShowReviewPrompt,
+} = loaded;
 
 let passed = 0;
 let failed = 0;
@@ -59,12 +68,12 @@ function show(overState, overVerdicts) {
   return shouldShowReviewPrompt(
     eligible(overState),
     now,
-    Object.assign({ auth: 'trusted', ai: null }, overVerdicts || {})
+    Object.assign({ auth: 'trusted', ai: null, aiDone: true }, overVerdicts || {})
   );
 }
 
 console.log('trusted vs warning vs loading');
-check('trusted auth, no AI verdict: show', show() === true);
+check('trusted auth, AI settled with no verdict: show', show() === true);
 check('trusted auth, AI Ok: show', show(null, { ai: 'Ok' }) === true);
 check('auth caution: hide', show(null, { auth: 'caution' }) === false);
 check('auth dangerous: hide', show(null, { auth: 'dangerous' }) === false);
@@ -145,14 +154,14 @@ console.log('migration of old snooze');
   delete recent.gsi_review_dismiss_count;
   recent.gsi_review_snoozed_at = now - 10 * DAY;
   check('old snooze with no count is still inside the 30-day wait',
-    shouldShowReviewPrompt(recent, now, { auth: 'trusted', ai: null }) === false);
+    shouldShowReviewPrompt(recent, now, { auth: 'trusted', ai: null, aiDone: true }) === false);
   check('old snooze counts as dismiss 1', effectiveReviewDismissCount(recent) === 1);
 
   const expired = eligible();
   delete expired.gsi_review_dismiss_count;
   expired.gsi_review_snoozed_at = now - 31 * DAY;
   check('old snooze past 30 days can ask once more',
-    shouldShowReviewPrompt(expired, now, { auth: 'trusted', ai: 'Ok' }) === true);
+    shouldShowReviewPrompt(expired, now, { auth: 'trusted', ai: 'Ok', aiDone: true }) === true);
   check('that second chance is still only one dismissal',
     effectiveReviewDismissCount(expired) === 1);
   check('the next Not now after an old snooze is the last',
@@ -169,6 +178,70 @@ check('decision does not mutate the state object', (() => {
   return state.gsi_email_view_count === 214 && state.gsi_review_dismiss_count === 0;
 })());
 
+console.log('AI completion');
+{
+  check('no show while AI is pending', show(null, { aiDone: false, ai: null }) === false);
+  const ok = reviewAiResultSettlement({ verdict: 'Ok' }, null);
+  check('Ok result is done', ok.aiDone === true && ok.ai === 'Ok' && ok.failed === false);
+  check('show after AI Ok', show(null, { ai: ok.ai, aiDone: ok.aiDone }) === true);
+  const timedOut = reviewAiResultSettlement({ timeout: true }, null);
+  const unavailable = reviewAiResultSettlement(null, null);
+  const parseFailed = reviewAiResultSettlement({ parseError: 'bad json' }, null);
+  check('timeout is done and does not block', timedOut.aiDone === true && timedOut.ai == null && timedOut.failed === true);
+  check('missing result is done and does not block', unavailable.aiDone === true && unavailable.failed === true);
+  check('parse error is done and does not block', parseFailed.aiDone === true && parseFailed.failed === true);
+  check('show after AI failure', show(null, { ai: timedOut.ai, aiDone: timedOut.aiDone }) === true);
+  const caution = reviewAiResultSettlement({ verdict: 'Caution' }, null);
+  const reject = reviewAiResultSettlement({ verdict: 'Reject' }, null);
+  check('no show after AI Caution', show(null, { ai: caution.ai, aiDone: caution.aiDone }) === false);
+  check('no show after AI Reject', show(null, { ai: reject.ai, aiDone: reject.aiDone }) === false);
+  check('failed retry keeps an earlier Caution', reviewAiResultSettlement({ timeout: true }, 'Caution').ai === 'Caution');
+  const noModel = reviewAiAvailabilitySettlement({ available: false, status: 'unavailable' });
+  const disabled = reviewAiAvailabilitySettlement({ available: false, status: 'downloadable' });
+  const downloading = reviewAiAvailabilitySettlement({ available: false, status: 'downloading' });
+  check('on-device AI unavailable is done', noModel.aiDone === true && noModel.ai == null);
+  check('AI disabled is done', disabled.aiDone === true && disabled.ai == null);
+  check('show when on-device AI is not available', show(null, { ai: noModel.ai, aiDone: noModel.aiDone }) === true);
+  check('a download still in progress is not done', downloading.aiDone === false);
+  check('no show while the model is downloading', show(null, { ai: null, aiDone: downloading.aiDone }) === false);
+}
+
+console.log('warning removal does not consume the ask');
+{
+  const session = {
+    shownThisTab: true,
+    gsi_review_dismiss_count: 1,
+    gsi_review_snoozed_at: now - 2 * DAY,
+  };
+  const cautionAuth = reviewPromptWarningEffect(session, { auth: 'caution', ai: null, aiDone: true });
+  check('auth warning clears the per-tab showing', cautionAuth.shownThisTab === false && cautionAuth.removeRow === true);
+  check('auth warning writes no storage', cautionAuth.storage === null);
+  check('auth warning leaves the dismiss count', session.gsi_review_dismiss_count === 1);
+  check('auth warning leaves the snooze', session.gsi_review_snoozed_at === now - 2 * DAY);
+  const aiCaution = reviewPromptWarningEffect(session, { auth: 'trusted', ai: 'Caution', aiDone: true });
+  check('AI Caution clears the per-tab showing', aiCaution.shownThisTab === false && aiCaution.storage === null);
+  check('AI Reject clears the per-tab showing',
+    reviewPromptWarningEffect(session, { auth: 'trusted', ai: 'Reject', aiDone: true }).shownThisTab === false);
+  check('dangerous verdict clears the per-tab showing',
+    reviewPromptWarningEffect(session, { auth: 'dangerous', ai: null, aiDone: true }).shownThisTab === false);
+  check('a settled Trusted result does not clear a real showing',
+    reviewPromptWarningEffect({ shownThisTab: true }, { auth: 'trusted', ai: 'Ok', aiDone: true }).shownThisTab === true);
+  check('next Trusted email in the tab can still show', shouldShowReviewPrompt(
+    eligible({
+      shownThisTab: cautionAuth.shownThisTab,
+      gsi_review_dismiss_count: session.gsi_review_dismiss_count,
+      gsi_review_snoozed_at: null,
+    }),
+    now,
+    { auth: 'trusted', ai: 'Ok', aiDone: true }
+  ) === true);
+  check('keeping the flag would hide that next email', shouldShowReviewPrompt(
+    eligible({ shownThisTab: true }),
+    now,
+    { auth: 'trusted', ai: 'Ok', aiDone: true }
+  ) === false);
+}
+
 console.log('shipped copy');
 {
   const content = fs.readFileSync(contentPath, 'utf8');
@@ -181,7 +254,12 @@ console.log('shipped copy');
   check('support url', content.includes('https://lankeami.github.io/gmail-sender-info/support.html'));
   check('new-tab links set rel noopener', (content.match(/rel = 'noopener'/g) || []).length >= 2);
   check('Rate it and Not now are buttons', content.includes("rate.type = 'button'") && content.includes("later.type = 'button'"));
-  check('prompt copy', content.includes("If it's helped, a quick rating helps other people find it."));
+  check('prompt copy', content.includes("Checked ' + count.toLocaleString() + ' emails for you."));
+  check('prompt follow-up sentence', content.includes("If it's helped, a quick rating helps other people find it."));
+  check('old long lead is gone', !content.includes('Gmail Sender Info has checked '));
+  check('sync uses the warning effect', content.includes('reviewPromptWarningEffect('));
+  check('AI result uses settlement', content.includes('reviewAiResultSettlement('));
+  check('unavailable AI uses settlement', content.includes('reviewAiAvailabilitySettlement('));
   check('manifest description is the approved summary', manifest.description === summary);
   check('manifest description is 129 characters', manifest.description.length === 129);
 }

@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- Replace the in-email review nag with one calm prompt. It shows only when that email's final auth verdict is Trusted (and on-device AI has not said Caution or Reject), after 7 days and 20 opened emails, and only once a warning has been shown or 30 days have passed with none. Rate it opens the Chrome Web Store reviews page and never asks again. Not now waits 30 days; a second Not now, or Report a problem, never asks again. The prompt renders at most once per Gmail tab, and it leaves if the verdict later drops to caution or dangerous.
+- Replace the in-email review nag with one calm prompt. It shows only when that email's final auth verdict is Trusted and on-device AI has finished without Caution or Reject (a failed or unavailable AI check does not block), after 7 days and 20 opened emails, and only once a warning has been shown or 30 days have passed with none. The ask waits until AI is done, so it does not appear and then vanish. A later warning removes the row without using up the one prompt for that Gmail tab and without snoozing. Rate it opens the Chrome Web Store reviews page and never asks again. Not now waits 30 days; a second Not now, or Report a problem, never asks again. The row is one full-width line: "Checked {count} emails for you." on the left, buttons on the right.
 - Chrome Web Store summary in `manifest.json` is now the approved 129-character description. The version is unchanged.
 
 ## 2026-10-29

@@ -143,20 +143,20 @@ Always visible below the main strip (not inside the expandable details). Uses Ch
 
 Conditionally visible below the AI line, above the details panel. One calm ask per Gmail tab for a Chrome Web Store rating. Same controls for everyone: no star picker, no rewards, no modal, no toolbar badge. Eligibility is `shouldShowReviewPrompt(state, now, verdicts)` in `content.js`.
 
-**Classes:** `.gsi-review-prompt` (light blue `#f4f8fe` row, top border), `.gsi-review-prompt-copy`, `.gsi-review-prompt-actions`, `.gsi-review-prompt-btn`, `.gsi-review-prompt-primary` (Gmail blue `#1a73e8` pill), `.gsi-review-prompt-secondary` (outlined pill), `.gsi-review-prompt-report` (right-aligned text link).
+**Classes:** `.gsi-review-prompt` (full-width flex row, light blue `#f4f8fe`, padding `8px 14px`, `gap: 8px 12px`, wraps), `.gsi-review-prompt-copy` (`flex: 1`, shrinks), `.gsi-review-prompt-actions` (Rate it, Not now, Report a problem; sits on the right and wraps below the copy on a narrow banner), `.gsi-review-prompt-btn`, `.gsi-review-prompt-primary` (Gmail blue `#1a73e8` pill), `.gsi-review-prompt-secondary` (outlined pill), `.gsi-review-prompt-report` (text link).
 
 **Show conditions (all must be true):**
 - Final auth verdict for this email is `trusted` (not `caution` / `dangerous`, and not while the pill still says Checking)
-- AI verdict has not arrived as `Caution` or `Reject` (`Ok` or no AI result is fine)
+- On-device AI is finished (`aiDone`): a result of `Ok`, a failed run, or AI unavailable/disabled. Not while analysis or a model download is still in progress. `Caution` or `Reject` blocks the row
 - No `gsi_review_clicked_at` (already rated — never again)
 - `gsi_review_dismiss_count` < 2 (a pre-counter `gsi_review_snoozed_at` counts as 1)
 - No `gsi_review_snoozed_at` within the last 30 days
-- Not already rendered during this Gmail tab load (in-memory flag; the row stays on that email, including if the user keeps it open)
+- Not already shown on a final Trusted email during this Gmail tab load. Removing the row because the verdict later warns does not count as a showing and does not write snooze or dismiss storage
 - `gsi_first_use_time` is 7+ days ago
 - `gsi_email_view_count` >= 20
 - `gsi_warned_at` is set, or first use was 30+ days ago
 
-If the auth verdict later drops to caution or dangerous (including the unknown-logo cap), or AI returns Caution/Reject, the row is removed. The first time any email resolves to caution or dangerous, `gsi_warned_at` is set once.
+If the auth verdict later drops to caution or dangerous (including the unknown-logo cap), or AI returns Caution/Reject, the row is removed and the in-tab flag is cleared. The first time any email resolves to caution or dangerous, `gsi_warned_at` is set once. Copy lead is "Checked {count} emails for you."
 
 **User actions:**
 - Rate it → new tab to the store reviews page (`noopener`), sets `gsi_review_clicked_at`, never asks again

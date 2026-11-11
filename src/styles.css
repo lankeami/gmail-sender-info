@@ -39,6 +39,9 @@
 /* --- Banner (email view) — compact strip --- */
 
 #gsi-banner {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
   background: #fafafa;
   border: 1px solid #e0e0e0;
   border-radius: 8px;
@@ -420,13 +423,24 @@
 /* --- Review prompt (trusted emails only) --- */
 
 #gsi-banner .gsi-review-prompt {
-  padding: 12px 14px;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  width: 100%;
+  max-width: 100%;
+  align-self: stretch;
+  grid-column: 1 / -1;
+  box-sizing: border-box;
+  padding: 8px 14px;
   border-top: 1px solid #ebebeb;
   background: #f4f8fe;
 }
 
 #gsi-banner .gsi-review-prompt-copy {
-  margin: 0 0 10px;
+  margin: 0;
+  flex: 1 1 22rem;
+  min-width: min(100%, 22rem);
   font-size: 13px;
   line-height: 1.4;
   color: #1a1a1a;
@@ -439,8 +453,9 @@
 #gsi-banner .gsi-review-prompt-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
   align-items: center;
+  gap: 8px;
+  margin-left: auto;
 }
 
 #gsi-banner .gsi-review-prompt-btn {
@@ -459,6 +474,8 @@
   cursor: pointer;
   text-decoration: none;
   user-select: none;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 #gsi-banner .gsi-review-prompt-primary,
@@ -486,7 +503,7 @@
 }
 
 #gsi-banner .gsi-review-prompt-report {
-  margin-left: auto;
+  margin-left: 0;
   font-family: inherit;
   font-size: 12px;
   line-height: 18px;
@@ -496,6 +513,7 @@
   border: none;
   padding: 0;
   cursor: pointer;
+  white-space: nowrap;
 }
 
 #gsi-banner .gsi-review-prompt-report:hover {

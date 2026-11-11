@@ -1179,15 +1179,52 @@
   }
 
   /**
+   * Settle a Gemini Nano result. A failure (timeout, parse error, unavailable)
+   * is done and keeps any earlier Caution/Reject. It does not block on its own.
+   */
+  function reviewAiResultSettlement(result, previousAi) {
+    const failed = !result || result.unavailable === true || result.timeout === true || !!result.parseError;
+    if (failed) return { aiDone: true, ai: previousAi || null, failed: true };
+    return { aiDone: true, ai: result.verdict || previousAi || null, failed: false };
+  }
+
+  /**
+   * Settle the availability check. A download still in progress is not done.
+   * Unavailable, disabled, or not installed counts as done with no verdict.
+   */
+  function reviewAiAvailabilitySettlement(status) {
+    if (status && status.available) return { aiDone: false, ai: null };
+    if (status && status.status === 'downloading') return { aiDone: false, ai: null };
+    return { aiDone: true, ai: null };
+  }
+
+  /**
+   * A warning removes the row and frees the one-per-tab showing.
+   * It does not snooze, dismiss, or write any other review storage.
+   */
+  function reviewPromptWarningEffect(session, verdicts) {
+    const auth = verdicts && verdicts.auth;
+    const ai = verdicts && verdicts.ai;
+    const warning = auth === 'caution' || auth === 'dangerous' || ai === 'Caution' || ai === 'Reject';
+    if (warning) return { shownThisTab: false, storage: null, removeRow: true };
+    return {
+      shownThisTab: !!(session && session.shownThisTab),
+      storage: null,
+      removeRow: false,
+    };
+  }
+
+  /**
    * Whether the review prompt may render.
    * @param {object} state storage fields plus shownThisTab (in-memory, this tab)
    * @param {number} now epoch ms
-   * @param {{auth: string|null, ai: string|null}} verdicts auth is trusted/caution/dangerous; ai is Ok/Caution/Reject or null when none arrived
+   * @param {{auth: string|null, ai: string|null, aiDone: boolean}} verdicts auth is trusted/caution/dangerous; ai is Ok/Caution/Reject or null; aiDone is false while analysis is still in flight
    */
   function shouldShowReviewPrompt(state, now, verdicts) {
     const DAY = 86400000;
     if (!state || !verdicts) return false;
     if (verdicts.auth !== 'trusted') return false;
+    if (verdicts.aiDone !== true) return false;
     if (verdicts.ai === 'Caution' || verdicts.ai === 'Reject') return false;
     if (state.shownThisTab) return false;
     if (state.gsi_review_clicked_at != null && state.gsi_review_clicked_at !== '') return false;
@@ -1261,10 +1298,9 @@
     const copy = document.createElement('p');
     copy.classList.add('gsi-review-prompt-copy');
     const lead = document.createElement('strong');
-    lead.textContent = 'Gmail Sender Info has checked ' + count.toLocaleString() + ' emails for you.';
+    lead.textContent = 'Checked ' + count.toLocaleString() + ' emails for you.';
     copy.appendChild(lead);
-    copy.appendChild(document.createElement('br'));
-    copy.appendChild(document.createTextNode("If it's helped, a quick rating helps other people find it."));
+    copy.appendChild(document.createTextNode(" If it's helped, a quick rating helps other people find it."));
     row.appendChild(copy);
 
     const actions = document.createElement('div');
@@ -1326,27 +1362,42 @@
 
   function syncReviewPrompt(banner, bannerState) {
     if (!banner || !banner.isConnected) return;
-    const auth = bannerState.authVerdict;
-    const ai = bannerState.aiVerdict;
-    if (auth === 'caution' || auth === 'dangerous' || ai === 'Caution' || ai === 'Reject') {
+    const effect = reviewPromptWarningEffect(
+      { shownThisTab: reviewPromptShownThisTab },
+      { auth: bannerState.authVerdict, ai: bannerState.aiVerdict }
+    );
+    if (effect.removeRow) {
       const existing = banner.querySelector('.gsi-review-prompt');
       if (existing) existing.remove();
+      // A warning is not a showing and not a dismissal. The next Trusted
+      // email in this tab can still ask. No storage write.
+      reviewPromptShownThisTab = effect.shownThisTab;
       reviewPromptTicket++;
       return;
     }
-    if (auth !== 'trusted' || reviewPromptShownThisTab) return;
+    if (bannerState.authVerdict !== 'trusted' || bannerState.aiDone !== true || reviewPromptShownThisTab) return;
     if (banner.querySelector('.gsi-review-prompt')) return;
 
     const ticket = ++reviewPromptTicket;
     emailViewCountReady.then(() => storageLocalGet(REVIEW_PROMPT_STORAGE_KEYS)).then((rs) => {
       if (ticket !== reviewPromptTicket) return;
       if (!banner.isConnected || reviewPromptShownThisTab) return;
-      if (bannerState.authVerdict !== 'trusted') return;
-      if (bannerState.aiVerdict === 'Caution' || bannerState.aiVerdict === 'Reject') return;
+      const again = reviewPromptWarningEffect(
+        { shownThisTab: reviewPromptShownThisTab },
+        { auth: bannerState.authVerdict, ai: bannerState.aiVerdict }
+      );
+      if (again.removeRow) {
+        const existing = banner.querySelector('.gsi-review-prompt');
+        if (existing) existing.remove();
+        reviewPromptShownThisTab = again.shownThisTab;
+        return;
+      }
+      if (bannerState.authVerdict !== 'trusted' || bannerState.aiDone !== true) return;
       const state = Object.assign({}, rs, { shownThisTab: reviewPromptShownThisTab });
       if (!shouldShowReviewPrompt(state, Date.now(), {
         auth: bannerState.authVerdict,
         ai: bannerState.aiVerdict,
+        aiDone: bannerState.aiDone,
       })) return;
       renderReviewPrompt(banner, rs);
       reviewPromptShownThisTab = true;
@@ -1370,8 +1421,9 @@
 
     // Shared state for async logo/security/review coordination.
     // authVerdict stays null until the final verdict (trusted/caution/dangerous).
-    // aiVerdict stays null until Gemini Nano returns Ok, Caution, or Reject.
-    const bannerState = { resolvedLogoSource: null, authVerdict: null, aiVerdict: null };
+    // aiDone stays false until analysis finishes, fails, or on-device AI is unavailable.
+    // aiVerdict stays null unless Gemini Nano returns Ok, Caution, or Reject.
+    const bannerState = { resolvedLogoSource: null, authVerdict: null, aiVerdict: null, aiDone: false };
     bannerState.onVerdict = () => syncReviewPrompt(banner, bannerState);
 
     // Logo source text element (in details panel, created later but referenced in callback)
@@ -1741,6 +1793,14 @@
         } else {
           aiLine.style.display = 'none';
         }
+        // Unavailable or disabled: nothing more is coming, so the prompt may show.
+        // A model that is still downloading is not done until the retries stop.
+        const settled = reviewAiAvailabilitySettlement(aiStatus);
+        const gaveUp = aiStatus.status === 'downloading' && attempt >= 20;
+        if (settled.aiDone || gaveUp) {
+          bannerState.aiDone = true;
+          if (typeof bannerState.onVerdict === 'function') bannerState.onVerdict();
+        }
         return;
       }
 
@@ -1831,9 +1891,10 @@
       }
 
       function applyAiResult(result) {
-        const failed = !result || result.timeout || result.parseError;
-        // A failed run is not a verdict. Keep Caution/Reject from an earlier pass.
-        if (!failed && result.verdict) bannerState.aiVerdict = result.verdict;
+        const settled = reviewAiResultSettlement(result, bannerState.aiVerdict);
+        bannerState.aiDone = settled.aiDone;
+        bannerState.aiVerdict = settled.ai;
+        const failed = settled.failed;
 
         // Reset gemini icon classes
         geminiIcon.classList.remove('gsi-gemini-ok', 'gsi-gemini-caution', 'gsi-gemini-reject', 'gsi-gemini-neutral');
