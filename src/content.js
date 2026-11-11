@@ -1199,19 +1199,16 @@
   }
 
   /**
-   * A warning removes the row and frees the one-per-tab showing.
-   * It does not snooze, dismiss, or write any other review storage.
+   * A warning removes the row. It leaves shownThisTab as it already is,
+   * and it does not snooze, dismiss, or write any other review storage.
    */
   function reviewPromptWarningEffect(session, verdicts) {
     const auth = verdicts && verdicts.auth;
     const ai = verdicts && verdicts.ai;
+    const shownThisTab = !!(session && session.shownThisTab);
     const warning = auth === 'caution' || auth === 'dangerous' || ai === 'Caution' || ai === 'Reject';
-    if (warning) return { shownThisTab: false, storage: null, removeRow: true };
-    return {
-      shownThisTab: !!(session && session.shownThisTab),
-      storage: null,
-      removeRow: false,
-    };
+    if (warning) return { shownThisTab: shownThisTab, storage: null, removeRow: true };
+    return { shownThisTab: shownThisTab, storage: null, removeRow: false };
   }
 
   /**
@@ -1384,8 +1381,8 @@
     if (effect.removeRow) {
       const existing = banner.querySelector('.gsi-review-prompt');
       if (existing) existing.remove();
-      // A warning is not a showing and not a dismissal. The next Trusted
-      // email in this tab can still ask. No storage write.
+      // A warning does not write storage and does not change whether this
+      // tab has already shown the prompt.
       reviewPromptShownThisTab = effect.shownThisTab;
       reviewPromptTicket++;
       logReviewSkip('warning');

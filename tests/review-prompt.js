@@ -208,7 +208,7 @@ console.log('AI completion');
   check('no show while the model is downloading', show(null, { ai: null, aiDone: downloading.aiDone }) === false);
 }
 
-console.log('warning removal does not consume the ask');
+console.log('warning removal leaves the per-tab showing alone');
 {
   const session = {
     shownThisTab: true,
@@ -216,32 +216,30 @@ console.log('warning removal does not consume the ask');
     gsi_review_snoozed_at: now - 2 * DAY,
   };
   const cautionAuth = reviewPromptWarningEffect(session, { auth: 'caution', ai: null, aiDone: true });
-  check('auth warning clears the per-tab showing', cautionAuth.shownThisTab === false && cautionAuth.removeRow === true);
+  check('auth warning keeps a consumed tab consumed', cautionAuth.shownThisTab === true && cautionAuth.removeRow === true);
   check('auth warning writes no storage', cautionAuth.storage === null);
   check('auth warning leaves the dismiss count', session.gsi_review_dismiss_count === 1);
   check('auth warning leaves the snooze', session.gsi_review_snoozed_at === now - 2 * DAY);
   const aiCaution = reviewPromptWarningEffect(session, { auth: 'trusted', ai: 'Caution', aiDone: true });
-  check('AI Caution clears the per-tab showing', aiCaution.shownThisTab === false && aiCaution.storage === null);
-  check('AI Reject clears the per-tab showing',
-    reviewPromptWarningEffect(session, { auth: 'trusted', ai: 'Reject', aiDone: true }).shownThisTab === false);
-  check('dangerous verdict clears the per-tab showing',
-    reviewPromptWarningEffect(session, { auth: 'dangerous', ai: null, aiDone: true }).shownThisTab === false);
-  check('a settled Trusted result does not clear a real showing',
+  check('AI Caution keeps a consumed tab consumed', aiCaution.shownThisTab === true && aiCaution.storage === null);
+  check('AI Reject keeps a consumed tab consumed',
+    reviewPromptWarningEffect(session, { auth: 'trusted', ai: 'Reject', aiDone: true }).shownThisTab === true);
+  check('dangerous verdict keeps a consumed tab consumed',
+    reviewPromptWarningEffect(session, { auth: 'dangerous', ai: null, aiDone: true }).shownThisTab === true);
+  const unseen = reviewPromptWarningEffect({ shownThisTab: false }, { auth: 'caution', ai: 'Caution', aiDone: true });
+  check('a warning before any showing leaves the tab unused', unseen.shownThisTab === false && unseen.removeRow === true && unseen.storage === null);
+  check('a settled Trusted result leaves a real showing in place',
     reviewPromptWarningEffect({ shownThisTab: true }, { auth: 'trusted', ai: 'Ok', aiDone: true }).shownThisTab === true);
-  check('next Trusted email in the tab can still show', shouldShowReviewPrompt(
-    eligible({
-      shownThisTab: cautionAuth.shownThisTab,
-      gsi_review_dismiss_count: session.gsi_review_dismiss_count,
-      gsi_review_snoozed_at: null,
-    }),
-    now,
-    { auth: 'trusted', ai: 'Ok', aiDone: true }
-  ) === true);
-  check('keeping the flag would hide that next email', shouldShowReviewPrompt(
-    eligible({ shownThisTab: true }),
+  check('next Trusted email stays hidden after a seen prompt', shouldShowReviewPrompt(
+    eligible({ shownThisTab: cautionAuth.shownThisTab }),
     now,
     { auth: 'trusted', ai: 'Ok', aiDone: true }
   ) === false);
+  check('next Trusted email can show if this tab never showed the prompt', shouldShowReviewPrompt(
+    eligible({ shownThisTab: unseen.shownThisTab }),
+    now,
+    { auth: 'trusted', ai: 'Ok', aiDone: true }
+  ) === true);
 }
 
 console.log('shipped copy');

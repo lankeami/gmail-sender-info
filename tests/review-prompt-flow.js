@@ -1,13 +1,9 @@
 /**
  * Drives the real content-script banner for the review prompt.
- * Documents the once-per-tab behavior in the current content script.
- * Seeing the prompt and opening another Trusted email consumes that tab.
- * A Caution email shows nothing and, because the warning handler clears the
- * in-tab flag, a later Trusted email may show the prompt again.
- * A fresh tab (script reloaded, storage kept) can show it.
- * A warning that lands on the banner currently showing the prompt removes
- * the row without writing snooze or dismiss storage, and does not consume
- * the tab's showing.
+ * Documents once-per-tab behavior. Seeing the prompt consumes the tab.
+ * A later warning does not give that showing back, and a warning on the
+ * banner that is currently showing the prompt removes the row while leaving
+ * the tab consumed. A warning before any showing leaves the tab unused.
  * Run: node tests/review-prompt-flow.js
  */
 
@@ -217,7 +213,7 @@ async function openEmail(session, { email, messageId, auth, ai }) {
 }
 
 (async () => {
-  console.log('same tab: seen prompt stays consumed until a warning');
+  console.log('same tab: show once, then not again');
   {
     const store = eligibleStore();
     const session = boot(store);
@@ -229,12 +225,17 @@ async function openEmail(session, { email, messageId, auth, ai }) {
     });
     check('A Trusted+OK shows the prompt', a.prompt === true);
 
-    const straight = await openEmail(session, {
+    const b = await openEmail(session, {
+      email: 'b@beta.test', messageId: 'bbb222', auth: caution, ai: 'Caution',
+    });
+    check('B with a warning shows nothing', b.prompt === false);
+
+    const c = await openEmail(session, {
       email: 'c@gamma.test', messageId: 'ccc333', auth: trusted, ai: 'Ok',
     });
-    check('another Trusted+OK in the same tab does not show', straight.prompt === false);
-    check('that email was skipped because it was already shown this tab',
-      straight.skips.some((line) => line.indexOf('shown-this-tab') !== -1));
+    check('C Trusted+OK in the same tab does not show', c.prompt === false);
+    check('C was skipped because it was already shown this tab',
+      c.skips.some((line) => line.indexOf('shown-this-tab') !== -1));
 
     const reloaded = boot(store);
     const again = await openEmail(reloaded, {
@@ -242,26 +243,18 @@ async function openEmail(session, { email, messageId, auth, ai }) {
     });
     check('fresh tab shows the prompt again', again.prompt === true);
 
-    const withWarning = boot(eligibleStore());
-    const first = await openEmail(withWarning, {
-      email: 'a@alpha.test', messageId: 'aaa111', auth: trusted, ai: 'Ok',
-    });
-    check('prompt shows before the caution email', first.prompt === true);
-    const bad = await openEmail(withWarning, {
+    const unseen = boot(eligibleStore());
+    const onlyBad = await openEmail(unseen, {
       email: 'b@beta.test', messageId: 'bbb222', auth: caution, ai: 'Caution',
     });
-    check('B Caution shows nothing', bad.prompt === false);
-    check('B logs a warning skip', bad.skips.some((line) => line.indexOf('warning') !== -1));
-    const afterBad = await openEmail(withWarning, {
-      email: 'e@epsilon.test', messageId: 'eee555', auth: trusted, ai: 'Ok',
+    check('a warning before any showing shows nothing', onlyBad.prompt === false);
+    const afterUnseen = await openEmail(unseen, {
+      email: 'a@alpha.test', messageId: 'aaa111', auth: trusted, ai: 'Ok',
     });
-    // A warning on a later email clears the in-tab flag, so the next
-    // Trusted+OK email is allowed again. Navigating from a seen prompt
-    // straight to another trusted email does not.
-    check('Trusted+OK after a caution email shows again', afterBad.prompt === true);
+    check('Trusted+OK shows when this tab has not shown the prompt yet', afterUnseen.prompt === true);
   }
 
-  console.log('warning on the visible prompt does not consume the tab');
+  console.log('warning on the visible prompt leaves the tab consumed');
   {
     const store = eligibleStore();
     const session = boot(store);
@@ -293,7 +286,9 @@ async function openEmail(session, { email, messageId, auth, ai }) {
     const next = await openEmail(session, {
       email: 'e@epsilon.test', messageId: 'eee555', auth: trusted, ai: 'Ok',
     });
-    check('next Trusted+OK shows after a warning removed the prompt', next.prompt === true);
+    check('next Trusted+OK stays hidden after the warning removed the prompt', next.prompt === false);
+    check('that next email is skipped as already shown this tab',
+      next.skips.some((line) => line.indexOf('shown-this-tab') !== -1));
   }
 
   console.log('\n' + passed + ' passed, ' + failed + ' failed');

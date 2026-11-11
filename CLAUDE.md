@@ -151,12 +151,12 @@ Conditionally visible below the AI line, above the details panel. One calm ask p
 - No `gsi_review_clicked_at` (already rated — never again)
 - `gsi_review_dismiss_count` < 2 (a pre-counter `gsi_review_snoozed_at` counts as 1)
 - No `gsi_review_snoozed_at` within the last 30 days
-- Not already shown on a final Trusted email during this Gmail tab load. Removing the row because the verdict later warns does not count as a showing and does not write snooze or dismiss storage
+- Not already shown on a final Trusted email during this Gmail tab load. A warning removes the row if it is visible and does not change that flag, and it does not write snooze or dismiss storage. If this tab has not shown the prompt yet, a warning leaves it unshown
 - `gsi_first_use_time` is 7+ days ago
 - `gsi_email_view_count` >= 20
 - `gsi_warned_at` is set, or first use was 30+ days ago
 
-If the auth verdict later drops to caution or dangerous (including the unknown-logo cap), or AI returns Caution/Reject, the row is removed and the in-tab flag is cleared. The first time any email resolves to caution or dangerous, `gsi_warned_at` is set once. Copy lead is "Checked {count} emails for you."
+If the auth verdict later drops to caution or dangerous (including the unknown-logo cap), or AI returns Caution/Reject, the row is removed and the in-tab flag stays as it was. The first time any email resolves to caution or dangerous, `gsi_warned_at` is set once. Copy lead is "Checked {count} emails for you."
 
 **User actions:**
 - Rate it → new tab to the store reviews page (`noopener`), sets `gsi_review_clicked_at`, never asks again
